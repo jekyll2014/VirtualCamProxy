@@ -1,0 +1,84 @@
+﻿using System.Drawing;
+using System.Drawing.Imaging;
+
+namespace VirtualCamera
+{
+    internal class Program
+    {
+        private static void Main()
+        {
+            const int xResolution = 320;
+            const int yResolution = 240;
+            Console.WriteLine("Press 'Esc' to quit.\r\n'r' - red on/off\r\n'g' - green on/off\r\n'b' - blue on/off\r\n");
+
+            using var camera = new SoftCamera(xResolution, yResolution);
+            var buffer = new byte[xResolution * yResolution * 3];
+            byte rVal = 0;
+            byte gVal = 0;
+            byte bVal = 0;
+            var exit = false;
+            var connected = camera.AppIsConnected;
+            var oldConnectedState = !connected;
+            var image = new Bitmap(xResolution, yResolution, PixelFormat.Format24bppRgb);
+            var g = Graphics.FromImage(image);
+            while (!exit)
+            {
+                connected = camera.AppIsConnected;
+                if (oldConnectedState != connected)
+                {
+                    oldConnectedState = connected;
+                    Console.WriteLine(connected
+                        ? "Application connected to camera\r\n"
+                        : "Application not connected to camera\r\n");
+                }
+
+                if (Console.KeyAvailable)
+                {
+                    var k = Console.ReadKey();
+                    int n;
+                    byte currentVal;
+                    if (k.Key == ConsoleKey.R)
+                    {
+                        n = 0;
+                        currentVal = rVal = rVal == 0 ? (byte)255 : (byte)0;
+                        g.FillRectangle(Brushes.Red, new Rectangle(0, 0, xResolution, yResolution));
+                    }
+                    else if (k.Key == ConsoleKey.G)
+                    {
+                        n = 1;
+                        currentVal = gVal = gVal == 0 ? (byte)255 : (byte)0;
+                        g.FillRectangle(Brushes.Green, new Rectangle(0, 0, xResolution, yResolution));
+                    }
+                    else if (k.Key == ConsoleKey.B)
+                    {
+                        n = 2;
+                        currentVal = bVal = bVal == 0 ? (byte)255 : (byte)0;
+                        g.FillRectangle(Brushes.Blue, new Rectangle(0, 0, xResolution, yResolution));
+                    }
+                    else if (k.Key == ConsoleKey.Escape || k.Key == ConsoleKey.Q)
+                    {
+                        exit = true;
+                        continue;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+
+                    if (connected)
+                    {
+                        for (var i = 2; i < buffer.Length; i += 3)
+                        {
+                            buffer[i - n] = currentVal;
+                        }
+
+                        //camera.PushFrame(buffer);
+                        camera.PushFrame(image);
+                    }
+                }
+                else
+                    Thread.Sleep(200);
+            }
+        }
+    }
+}
