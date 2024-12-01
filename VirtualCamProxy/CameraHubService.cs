@@ -5,6 +5,7 @@ using CameraLib.MJPEG;
 using CameraLib.USB;
 
 using System.Collections.Concurrent;
+using CameraLib.Screen;
 using OpenCvSharp;
 
 namespace VirtualCamProxy
@@ -15,6 +16,7 @@ namespace VirtualCamProxy
         private readonly int _maxBuffer;
         public readonly List<ICamera> Cameras = new List<ICamera>();
         public readonly ConcurrentQueue<Mat> ImageQueue = new ConcurrentQueue<Mat>();
+        public ICamera? CurrentCamera { get; private set; }
 
         public CameraHubService(CameraSettings settings)
         {
@@ -148,6 +150,26 @@ namespace VirtualCamProxy
                 }
             }
 
+            if (_cameraSettings.AutoSearchDektop)
+            {
+                Console.WriteLine("Autodetecting desktop screens...");
+                var screenCameras = ScreenCamera.DiscoverScreenCameras();
+                foreach (var c in screenCameras)
+                    Console.WriteLine($"Screen-CameraStream: {c.Name} - [{c.Path}]");
+
+                // add newly discovered cameras
+                foreach (var c in screenCameras
+                             .Where(c => Cameras
+                                 .All(n => n.Description.Path != c.Path)))
+                {
+                    var serverCamera = new ScreenCamera(c.Path);
+                    serverCamera.FrameTimeout = _cameraSettings.FrameTimeout;
+                    Cameras.Add(serverCamera);
+                }
+            }
+
+            Cameras.Add(new VideoFileCamera(""));
+
             Console.WriteLine("Done.");
         }
 
@@ -165,33 +187,29 @@ namespace VirtualCamProxy
             if (Cameras.All(n => n.Description.Path != cameraId))
                 return CancellationToken.None;
 
-            var camera = Cameras
-                .FirstOrDefault(n => n.Description.Path == cameraId);
+            CurrentCamera = Cameras
+            .FirstOrDefault(n => n.Description.Path == cameraId);
 
-            if (camera == null)
+            if (CurrentCamera == null)
                 return CancellationToken.None;
 
-            camera.ImageCapturedEvent += GetImageFromCameraStream;
-            if (!await camera.Start(width,
+            CurrentCamera.ImageCapturedEvent += GetImageFromCameraStream;
+            if (!await CurrentCamera.Start(width,
                     height,
                     imageFormat,
                     CancellationToken.None))
                 return CancellationToken.None;
 
-            return camera.CancellationToken;
+            return CurrentCamera.CancellationToken;
         }
 
-        public bool UnHookCamera(string cameraId)
+        public bool UnHookCamera()
         {
-            if (Cameras.All(n => n.Description.Path != cameraId))
-                return false;
-
-            var camera = Cameras.FirstOrDefault(n => n.Description.Path == cameraId);
-
-            if (camera != null)
+            if (CurrentCamera != null)
             {
-                camera.ImageCapturedEvent -= GetImageFromCameraStream;
-                camera.Stop();
+                CurrentCamera.ImageCapturedEvent -= GetImageFromCameraStream;
+                CurrentCamera.Stop();
+                CurrentCamera = null;
             }
 
             return true;

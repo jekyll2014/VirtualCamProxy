@@ -6,6 +6,9 @@
         USB,
         USB_FC,
         IP,
-        MJPEG
+        MJPEG,
+        Screen,
+        ImageFile,
+        VideoFile
     }
 }

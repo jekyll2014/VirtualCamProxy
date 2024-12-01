@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\CameraExtension\CameraExtension.csproj" />
     <ProjectReference Include="..\CameraLib\CameraLib.csproj" />
     <ProjectReference Include="..\VirtualCamera\VirtualCamera.csproj" />
   </ItemGroup>

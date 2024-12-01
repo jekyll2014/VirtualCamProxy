@@ -1,4 +1,5 @@
 using CameraLib;
+using CameraLib.Screen;
 
 using OpenCvSharp;
 
@@ -20,6 +21,16 @@ namespace VirtualCamProxy
         private bool _cameraStarted = false;
         private SoftCamera? _softCamera;
         private ICamera? _currentSource;
+        private bool _showStream = false;
+        private bool _showCursor = false;
+        private bool _repeatFile = false;
+        private List<string> _videoFiles = new List<string>();
+        private List<string> _videoFileNames = new List<string>();
+        private string _videoFolderName = string.Empty;
+        private bool _flipHorizontal = false;
+        private bool _flipVertical = false;
+
+        private RotateFlags? _rotate = null;
 
         public Form1()
         {
@@ -33,6 +44,24 @@ namespace VirtualCamProxy
             Button_refresh_Click(this, EventArgs.Empty);
         }
 
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+
+            if (!(_cameraFeed?.IsCompleted ?? true))
+            {
+                Button_camStop_Click(this, EventArgs.Empty);
+                Button_softCamStop_Click(this, EventArgs.Empty);
+            }
+
+            _cameraHub.ImageQueue.Clear();
+            _configuration.Save();
+            if (_cameraFeed?.IsCompleted ?? false)
+                _cameraFeed?.Dispose();
+
+            _softCamera?.Dispose();
+        }
+
+        #region Camera tab
         private void Button_softCamStart_Click(object sender, EventArgs e)
         {
             if (_configuration.Storage.Width <= 0 || _configuration.Storage.Height <= 0)
@@ -94,6 +123,17 @@ namespace VirtualCamProxy
             var w = frameFormat?.Width ?? 0;
             var h = frameFormat?.Height ?? 0;
 
+            var currentCam = _cameraHub.GetCamera(comboBox_cameras.SelectedIndex);
+            if (currentCam is ScreenCamera scam)
+            {
+                scam.ShowCursor = _showCursor;
+            }
+            else if (currentCam is VideoFileCamera vcam)
+            {
+                vcam.RepeatFile = _repeatFile;
+                vcam.SetFile(_videoFiles);
+            }
+
             _cancellationToken = await _cameraHub.HookCamera(comboBox_cameras.SelectedIndex, w, h, "");
             if (_cancellationToken == CancellationToken.None)
             {
@@ -109,8 +149,9 @@ namespace VirtualCamProxy
                 return;
             }
 
+
             textBox_currentSource.Text = _currentSource.Description.Name;
-            _cameraFeed = Task.Run(CameraFeed, _cancellationToken ?? CancellationToken.None);
+            _cameraFeed = Task.Run(CameraFeed, (CancellationToken)_cancellationToken);
 
             button_camStart.Enabled = false;
             button_camStop.Enabled = true;
@@ -130,7 +171,7 @@ namespace VirtualCamProxy
             comboBox_camResolution.Enabled = false;
             _cameraStarted = false;
 
-            _cameraHub.UnHookCamera(_currentSource?.Description.Path ?? "");
+            _cameraHub.UnHookCamera();
             try
             {
                 if (_cameraFeed != null && !_cameraFeed.IsCompleted)
@@ -201,9 +242,26 @@ namespace VirtualCamProxy
                 //if ((_softCamera?.AppIsConnected ?? false) && _cameraHub.ImageQueue.TryDequeue(out var image))
                 if (_cameraHub.ImageQueue.TryDequeue(out var image) && _softCamera != null)
                 {
-                    var resizedImage = ResizeFit(image, softCamWidth, softCamHeigth);
+                    var rotated = new Mat();
+                    if (_rotate != null)
+                        Cv2.Rotate(image, rotated, (RotateFlags)_rotate);
+                    else
+                        rotated = image;
+
+                    var resizedImage = ResizeFit(rotated, softCamWidth, softCamHeigth);
                     if (resizedImage == null)
                         continue;
+
+                    if (_flipHorizontal)
+                    {
+                        resizedImage = resizedImage.Flip(FlipMode.Y);
+                    }
+
+                    if (_flipVertical)
+                    {
+
+                        resizedImage = resizedImage.Flip(FlipMode.X);
+                    }
 
                     /*
                     var buffer = Mat_to_array(image);
@@ -211,8 +269,21 @@ namespace VirtualCamProxy
                     */
 
                     var bitmap = MatToBitmap(resizedImage);
-                    _softCamera.PushFrame(bitmap);
-                    bitmap.Dispose();
+                    if (bitmap != null)
+                    {
+                        _softCamera.PushFrame(bitmap);
+
+                        if (_showStream)
+                        {
+                            var bmp = (Bitmap)bitmap.Clone();
+                            this.Invoke(() =>
+                            {
+                                pictureBox_cam.Image = bmp;
+                            });
+                        }
+
+                        bitmap.Dispose();
+                    }
 
                     resizedImage.Dispose();
                     image.Dispose();
@@ -272,19 +343,6 @@ namespace VirtualCamProxy
             }
         }
 
-        void GetBitmapsFromVideo(string file)
-        {
-            using (var video = new VideoCapture(file))
-            using (var img = new Mat())
-            {
-                while (video.Grab())
-                {
-                    video.Retrieve(img);
-                }
-            }
-
-        }
-
         /*
         private static byte[] _buffer;
         private static int _bufferWidth;
@@ -329,6 +387,11 @@ namespace VirtualCamProxy
                 textBox_y.Text = _configuration.Storage.Height.ToString();
         }
 
+        private void checkBox_showStream_CheckedChanged(object sender, EventArgs e)
+        {
+            _showStream = checkBox_showStream.Checked;
+        }
+
         private void ComboBox_cameras_SelectedIndexChanged(object sender, EventArgs e)
         {
             comboBox_camResolution.Items.Clear();
@@ -358,17 +421,108 @@ namespace VirtualCamProxy
                 textBox_currentSource.Clear();
             }
         }
+        #endregion
 
-        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        #region Desktop tab
+        private void checkBox_showCursor_CheckedChanged(object sender, EventArgs e)
         {
-            if (!(_cameraFeed?.IsCompleted ?? true))
-            {
-                _currentSource?.Stop();
-            }
-
-            _cameraHub.ImageQueue.Clear();
-            _cameraFeed?.Dispose();
-            _softCamera?.Dispose();
+            _showCursor = checkBox_showCursor.Checked;
+            if (_cameraHub.CurrentCamera is ScreenCamera scam)
+                scam.ShowCursor = _showCursor;
         }
+        #endregion
+
+        #region Image tab
+
+        #endregion
+
+        #region Video tab
+        private async void button_selectVideoFile_Click(object sender, EventArgs e)
+        {
+            openFileDialog1.FileName = "";
+            openFileDialog1.Title = "Open video file";
+            openFileDialog1.DefaultExt = "avi";
+            openFileDialog1.Filter = "AVI files|*.avi|MP4 files|*.mp4|MKV files|*.mkv|All files|*.*";
+            openFileDialog1.Multiselect = true;
+
+            if (openFileDialog1.ShowDialog() == DialogResult.OK)
+            {
+                _videoFileNames.Clear();
+                _videoFileNames.AddRange(openFileDialog1.FileNames);
+                textBox_selectedVideoFile.Text = string.Join("\r\n", _videoFileNames);
+            }
+        }
+
+        private void button_selectVideoFolder_Click(object sender, EventArgs e)
+        {
+            if (folderBrowserDialog1.ShowDialog() == DialogResult.OK)
+            {
+                var folderName = folderBrowserDialog1.SelectedPath;
+                textBox_selectedVideoFolder.Text = folderName;
+                _videoFolderName = folderName;
+            }
+        }
+
+        private void checkBox_repeatFile_CheckedChanged(object sender, EventArgs e)
+        {
+            _repeatFile = checkBox_repeatFile.Checked;
+            if (_cameraHub.CurrentCamera is VideoFileCamera vcam)
+                vcam.RepeatFile = _repeatFile;
+        }
+
+        private void radioButton_videoFolderChecked_CheckedChanged(object sender, EventArgs e)
+        {
+            if (radioButton_videoFolderChecked.Checked)
+            {
+                _videoFiles.Clear();
+                _videoFiles.AddRange(Directory.GetFiles(_videoFolderName));
+                if (_cameraHub.CurrentCamera is VideoFileCamera vcam)
+                    vcam.SetFile(_videoFiles);
+            }
+        }
+
+        private void radioButton_videoFilesChecked_CheckedChanged(object sender, EventArgs e)
+        {
+            if (radioButton_videoFilesChecked.Checked)
+            {
+                _videoFiles.Clear();
+                _videoFiles.AddRange(_videoFileNames);
+                if (_cameraHub.CurrentCamera is VideoFileCamera vcam)
+                    vcam.SetFile(_videoFiles);
+            }
+        }
+        #endregion
+
+        #region Filters tab
+        private void checkBox_flipHorizontal_CheckedChanged(object sender, EventArgs e)
+        {
+            _flipHorizontal = checkBox_flipHorizontal.Checked;
+        }
+
+        private void checkBox_flipVertical_CheckedChanged(object sender, EventArgs e)
+        {
+            _flipVertical = checkBox_flipVertical.Checked;
+        }
+
+        private void radioButton_rotateNone_CheckedChanged(object sender, EventArgs e)
+        {
+            _rotate = null;
+        }
+
+        private void radioButton_rotate90_CheckedChanged(object sender, EventArgs e)
+        {
+            _rotate = RotateFlags.Rotate90Clockwise;
+        }
+
+        private void radioButton_rotate180_CheckedChanged(object sender, EventArgs e)
+        {
+            _rotate = RotateFlags.Rotate180;
+        }
+
+        private void radioButton_rotate270_CheckedChanged(object sender, EventArgs e)
+        {
+            _rotate = RotateFlags.Rotate90Counterclockwise;
+        }
+        #endregion
     }
 }
