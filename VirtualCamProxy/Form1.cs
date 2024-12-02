@@ -46,7 +46,6 @@ public partial class Form1 : Form
 
     private void Form1_FormClosing(object sender, FormClosingEventArgs e)
     {
-
         if (!(_cameraFeed?.IsCompleted ?? true))
         {
             Button_camStop_Click(this, EventArgs.Empty);

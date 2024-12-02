@@ -22,7 +22,6 @@ public class CameraHubService
     {
         _cameraSettings = settings;
         _maxBuffer = _cameraSettings.MaxFrameBuffer;
-        RefreshCameraCollection(CancellationToken.None).Wait();
     }
 
     public async Task RefreshCameraCollection(CancellationToken cancellationToken)

@@ -79,13 +79,20 @@ namespace CameraLib.MJPEG
 
             if (forceCameraConnect)
             {
-                if (PingAddress(cameraUri.Host, discoveryTimeout).Result)
+                if (PingAddress(cameraUri.Host, discoveryTimeout - 1000).Result)
                 {
-                    var image = GrabFrame(CancellationToken.None).Result;
-                    if (image != null)
+                    try
                     {
-                        frameFormats.Add(new FrameFormat(image.Width, image.Height, "MJPG"));
-                        image.Dispose();
+                        var image = GrabFrame(CancellationToken.None).Result;
+                        if (image != null)
+                        {
+                            frameFormats.Add(new FrameFormat(image.Width, image.Height, "MJPG"));
+                            image.Dispose();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+
                     }
                 }
             }
@@ -182,7 +189,6 @@ namespace CameraLib.MJPEG
                 while (IsRunning && DateTime.Now < timeOut)
                     Task.Delay(10);
 
-                _imageGrabber?.Dispose();
                 _frame?.Dispose();
                 CurrentFrameFormat = null;
                 _fpsTimer.Reset();
@@ -448,7 +454,6 @@ namespace CameraLib.MJPEG
                     Stop();
                     _keepAliveTimer.Close();
                     _keepAliveTimer.Dispose();
-                    _imageGrabber?.Dispose();
                     _cancellationTokenSource?.Dispose();
                     _frame?.Dispose();
                 }
