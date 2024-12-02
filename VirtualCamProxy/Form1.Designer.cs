@@ -35,6 +35,7 @@
             button_camGetImage = new Button();
             tabControl1 = new TabControl();
             tabPage_cam = new TabPage();
+            splitContainer1 = new SplitContainer();
             checkBox_showStream = new CheckBox();
             comboBox_camResolution = new ComboBox();
             button_camStop = new Button();
@@ -46,26 +47,6 @@
             radioButton_rotate90 = new RadioButton();
             checkBox_flipVertical = new CheckBox();
             checkBox_flipHorizontal = new CheckBox();
-            tabPage_desktop = new TabPage();
-            checkBox_showCursor = new CheckBox();
-            tabPage_images = new TabPage();
-            textBox3 = new TextBox();
-            button2 = new Button();
-            button1 = new Button();
-            textBox2 = new TextBox();
-            label3 = new Label();
-            label1 = new Label();
-            textBox1 = new TextBox();
-            radioButton2 = new RadioButton();
-            radioButton1 = new RadioButton();
-            tabPage_video = new TabPage();
-            radioButton_videoFilesChecked = new RadioButton();
-            radioButton_videoFolderChecked = new RadioButton();
-            checkBox_repeatFile = new CheckBox();
-            textBox_selectedVideoFolder = new TextBox();
-            textBox_selectedVideoFile = new TextBox();
-            button_selectVideoFolder = new Button();
-            button_selectVideoFile = new Button();
             button_softCamStop = new Button();
             button_softCamStart = new Button();
             label_x = new Label();
@@ -80,16 +61,16 @@
             ((System.ComponentModel.ISupportInitialize)pictureBox_cam).BeginInit();
             tabControl1.SuspendLayout();
             tabPage_cam.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)splitContainer1).BeginInit();
+            splitContainer1.Panel1.SuspendLayout();
+            splitContainer1.SuspendLayout();
             tabPage_filters.SuspendLayout();
             groupBox1.SuspendLayout();
-            tabPage_desktop.SuspendLayout();
-            tabPage_images.SuspendLayout();
-            tabPage_video.SuspendLayout();
             SuspendLayout();
             // 
             // button_camStart
             // 
-            button_camStart.Location = new Point(3, 35);
+            button_camStart.Location = new Point(3, 61);
             button_camStart.Name = "button_camStart";
             button_camStart.Size = new Size(75, 23);
             button_camStart.TabIndex = 0;
@@ -102,18 +83,18 @@
             comboBox_cameras.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             comboBox_cameras.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBox_cameras.FormattingEnabled = true;
-            comboBox_cameras.Location = new Point(6, 6);
+            comboBox_cameras.Location = new Point(3, 3);
             comboBox_cameras.Name = "comboBox_cameras";
-            comboBox_cameras.Size = new Size(577, 23);
+            comboBox_cameras.Size = new Size(483, 23);
             comboBox_cameras.TabIndex = 1;
             comboBox_cameras.SelectedIndexChanged += ComboBox_cameras_SelectedIndexChanged;
             // 
             // pictureBox_cam
             // 
             pictureBox_cam.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            pictureBox_cam.Location = new Point(8, 64);
+            pictureBox_cam.Location = new Point(3, 90);
             pictureBox_cam.Name = "pictureBox_cam";
-            pictureBox_cam.Size = new Size(752, 282);
+            pictureBox_cam.Size = new Size(483, 251);
             pictureBox_cam.SizeMode = PictureBoxSizeMode.Zoom;
             pictureBox_cam.TabIndex = 2;
             pictureBox_cam.TabStop = false;
@@ -121,7 +102,7 @@
             // button_refresh
             // 
             button_refresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            button_refresh.Location = new Point(685, 35);
+            button_refresh.Location = new Point(411, 32);
             button_refresh.Name = "button_refresh";
             button_refresh.Size = new Size(75, 23);
             button_refresh.TabIndex = 0;
@@ -131,7 +112,7 @@
             // 
             // button_camGetImage
             // 
-            button_camGetImage.Location = new Point(165, 35);
+            button_camGetImage.Location = new Point(165, 61);
             button_camGetImage.Name = "button_camGetImage";
             button_camGetImage.Size = new Size(75, 23);
             button_camGetImage.TabIndex = 0;
@@ -144,9 +125,6 @@
             tabControl1.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             tabControl1.Controls.Add(tabPage_cam);
             tabControl1.Controls.Add(tabPage_filters);
-            tabControl1.Controls.Add(tabPage_desktop);
-            tabControl1.Controls.Add(tabPage_images);
-            tabControl1.Controls.Add(tabPage_video);
             tabControl1.Location = new Point(12, 56);
             tabControl1.Name = "tabControl1";
             tabControl1.SelectedIndex = 0;
@@ -155,14 +133,7 @@
             // 
             // tabPage_cam
             // 
-            tabPage_cam.Controls.Add(checkBox_showStream);
-            tabPage_cam.Controls.Add(comboBox_camResolution);
-            tabPage_cam.Controls.Add(comboBox_cameras);
-            tabPage_cam.Controls.Add(pictureBox_cam);
-            tabPage_cam.Controls.Add(button_camGetImage);
-            tabPage_cam.Controls.Add(button_refresh);
-            tabPage_cam.Controls.Add(button_camStop);
-            tabPage_cam.Controls.Add(button_camStart);
+            tabPage_cam.Controls.Add(splitContainer1);
             tabPage_cam.Location = new Point(4, 24);
             tabPage_cam.Name = "tabPage_cam";
             tabPage_cam.Padding = new Padding(3);
@@ -171,30 +142,51 @@
             tabPage_cam.Text = "Camera";
             tabPage_cam.UseVisualStyleBackColor = true;
             // 
+            // splitContainer1
+            // 
+            splitContainer1.BorderStyle = BorderStyle.Fixed3D;
+            splitContainer1.Dock = DockStyle.Fill;
+            splitContainer1.Location = new Point(3, 3);
+            splitContainer1.Name = "splitContainer1";
+            // 
+            // splitContainer1.Panel1
+            // 
+            splitContainer1.Panel1.Controls.Add(comboBox_cameras);
+            splitContainer1.Panel1.Controls.Add(checkBox_showStream);
+            splitContainer1.Panel1.Controls.Add(button_camStart);
+            splitContainer1.Panel1.Controls.Add(comboBox_camResolution);
+            splitContainer1.Panel1.Controls.Add(button_camStop);
+            splitContainer1.Panel1.Controls.Add(button_refresh);
+            splitContainer1.Panel1.Controls.Add(pictureBox_cam);
+            splitContainer1.Panel1.Controls.Add(button_camGetImage);
+            splitContainer1.Size = new Size(762, 348);
+            splitContainer1.SplitterDistance = 493;
+            splitContainer1.TabIndex = 4;
+            // 
             // checkBox_showStream
             // 
             checkBox_showStream.AutoSize = true;
-            checkBox_showStream.Location = new Point(246, 38);
+            checkBox_showStream.Location = new Point(246, 64);
             checkBox_showStream.Name = "checkBox_showStream";
             checkBox_showStream.Size = new Size(99, 19);
             checkBox_showStream.TabIndex = 3;
             checkBox_showStream.Text = "Show stream";
             checkBox_showStream.UseVisualStyleBackColor = true;
-            checkBox_showStream.CheckedChanged += checkBox_showStream_CheckedChanged;
+            checkBox_showStream.CheckedChanged += CheckBox_showStream_CheckedChanged;
             // 
             // comboBox_camResolution
             // 
-            comboBox_camResolution.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            comboBox_camResolution.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             comboBox_camResolution.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBox_camResolution.FormattingEnabled = true;
-            comboBox_camResolution.Location = new Point(589, 6);
+            comboBox_camResolution.Location = new Point(3, 32);
             comboBox_camResolution.Name = "comboBox_camResolution";
-            comboBox_camResolution.Size = new Size(173, 23);
+            comboBox_camResolution.Size = new Size(402, 23);
             comboBox_camResolution.TabIndex = 1;
             // 
             // button_camStop
             // 
-            button_camStop.Location = new Point(84, 35);
+            button_camStop.Location = new Point(84, 61);
             button_camStop.Name = "button_camStop";
             button_camStop.Size = new Size(75, 23);
             button_camStop.TabIndex = 0;
@@ -239,7 +231,7 @@
             radioButton_rotateNone.TabStop = true;
             radioButton_rotateNone.Text = "None";
             radioButton_rotateNone.UseVisualStyleBackColor = true;
-            radioButton_rotateNone.CheckedChanged += radioButton_rotateNone_CheckedChanged;
+            radioButton_rotateNone.CheckedChanged += RadioButton_rotateNone_CheckedChanged;
             // 
             // radioButton_rotate270
             // 
@@ -250,7 +242,7 @@
             radioButton_rotate270.TabIndex = 1;
             radioButton_rotate270.Text = "-90°";
             radioButton_rotate270.UseVisualStyleBackColor = true;
-            radioButton_rotate270.CheckedChanged += radioButton_rotate270_CheckedChanged;
+            radioButton_rotate270.CheckedChanged += RadioButton_rotate270_CheckedChanged;
             // 
             // radioButton_rotate180
             // 
@@ -261,7 +253,7 @@
             radioButton_rotate180.TabIndex = 1;
             radioButton_rotate180.Text = "180°";
             radioButton_rotate180.UseVisualStyleBackColor = true;
-            radioButton_rotate180.CheckedChanged += radioButton_rotate180_CheckedChanged;
+            radioButton_rotate180.CheckedChanged += RadioButton_rotate180_CheckedChanged;
             // 
             // radioButton_rotate90
             // 
@@ -272,7 +264,7 @@
             radioButton_rotate90.TabIndex = 1;
             radioButton_rotate90.Text = "90°";
             radioButton_rotate90.UseVisualStyleBackColor = true;
-            radioButton_rotate90.CheckedChanged += radioButton_rotate90_CheckedChanged;
+            radioButton_rotate90.CheckedChanged += RadioButton_rotate90_CheckedChanged;
             // 
             // checkBox_flipVertical
             // 
@@ -283,7 +275,7 @@
             checkBox_flipVertical.TabIndex = 0;
             checkBox_flipVertical.Text = "Flip vertical";
             checkBox_flipVertical.UseVisualStyleBackColor = true;
-            checkBox_flipVertical.CheckedChanged += checkBox_flipVertical_CheckedChanged;
+            checkBox_flipVertical.CheckedChanged += CheckBox_flipVertical_CheckedChanged;
             // 
             // checkBox_flipHorizontal
             // 
@@ -294,228 +286,7 @@
             checkBox_flipHorizontal.TabIndex = 0;
             checkBox_flipHorizontal.Text = "Flip horizontal";
             checkBox_flipHorizontal.UseVisualStyleBackColor = true;
-            checkBox_flipHorizontal.CheckedChanged += checkBox_flipHorizontal_CheckedChanged;
-            // 
-            // tabPage_desktop
-            // 
-            tabPage_desktop.Controls.Add(checkBox_showCursor);
-            tabPage_desktop.Location = new Point(4, 24);
-            tabPage_desktop.Name = "tabPage_desktop";
-            tabPage_desktop.Size = new Size(768, 354);
-            tabPage_desktop.TabIndex = 3;
-            tabPage_desktop.Text = "Desktop";
-            tabPage_desktop.UseVisualStyleBackColor = true;
-            // 
-            // checkBox_showCursor
-            // 
-            checkBox_showCursor.AutoSize = true;
-            checkBox_showCursor.Location = new Point(3, 3);
-            checkBox_showCursor.Name = "checkBox_showCursor";
-            checkBox_showCursor.Size = new Size(95, 19);
-            checkBox_showCursor.TabIndex = 4;
-            checkBox_showCursor.Text = "Show cursor";
-            checkBox_showCursor.UseVisualStyleBackColor = true;
-            checkBox_showCursor.CheckedChanged += checkBox_showCursor_CheckedChanged;
-            // 
-            // tabPage_images
-            // 
-            tabPage_images.Controls.Add(textBox3);
-            tabPage_images.Controls.Add(button2);
-            tabPage_images.Controls.Add(button1);
-            tabPage_images.Controls.Add(textBox2);
-            tabPage_images.Controls.Add(label3);
-            tabPage_images.Controls.Add(label1);
-            tabPage_images.Controls.Add(textBox1);
-            tabPage_images.Controls.Add(radioButton2);
-            tabPage_images.Controls.Add(radioButton1);
-            tabPage_images.Location = new Point(4, 24);
-            tabPage_images.Name = "tabPage_images";
-            tabPage_images.Padding = new Padding(3);
-            tabPage_images.Size = new Size(768, 354);
-            tabPage_images.TabIndex = 1;
-            tabPage_images.Text = "Images";
-            tabPage_images.UseVisualStyleBackColor = true;
-            // 
-            // textBox3
-            // 
-            textBox3.Location = new Point(54, 6);
-            textBox3.MaxLength = 4;
-            textBox3.Name = "textBox3";
-            textBox3.Size = new Size(44, 23);
-            textBox3.TabIndex = 7;
-            textBox3.Text = "3";
-            textBox3.TextChanged += TextBox_x_TextChanged;
-            // 
-            // button2
-            // 
-            button2.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            button2.Location = new Point(669, 63);
-            button2.Name = "button2";
-            button2.Size = new Size(93, 23);
-            button2.TabIndex = 2;
-            button2.Text = "Select files";
-            button2.UseVisualStyleBackColor = true;
-            // 
-            // button1
-            // 
-            button1.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            button1.Location = new Point(669, 34);
-            button1.Name = "button1";
-            button1.Size = new Size(93, 23);
-            button1.TabIndex = 2;
-            button1.Text = "Select folder";
-            button1.UseVisualStyleBackColor = true;
-            // 
-            // textBox2
-            // 
-            textBox2.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            textBox2.Location = new Point(87, 63);
-            textBox2.Multiline = true;
-            textBox2.Name = "textBox2";
-            textBox2.Size = new Size(576, 285);
-            textBox2.TabIndex = 1;
-            // 
-            // label3
-            // 
-            label3.AutoSize = true;
-            label3.Location = new Point(104, 9);
-            label3.Name = "label3";
-            label3.Size = new Size(28, 15);
-            label3.TabIndex = 6;
-            label3.Text = "sec.";
-            // 
-            // label1
-            // 
-            label1.AutoSize = true;
-            label1.Location = new Point(8, 9);
-            label1.Name = "label1";
-            label1.Size = new Size(38, 15);
-            label1.TabIndex = 6;
-            label1.Text = "Delay";
-            // 
-            // textBox1
-            // 
-            textBox1.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            textBox1.Location = new Point(87, 34);
-            textBox1.Name = "textBox1";
-            textBox1.Size = new Size(576, 23);
-            textBox1.TabIndex = 1;
-            // 
-            // radioButton2
-            // 
-            radioButton2.AutoSize = true;
-            radioButton2.Checked = true;
-            radioButton2.Location = new Point(6, 64);
-            radioButton2.Name = "radioButton2";
-            radioButton2.Size = new Size(49, 19);
-            radioButton2.TabIndex = 0;
-            radioButton2.TabStop = true;
-            radioButton2.Text = "Files";
-            radioButton2.UseVisualStyleBackColor = true;
-            // 
-            // radioButton1
-            // 
-            radioButton1.AutoSize = true;
-            radioButton1.Location = new Point(6, 35);
-            radioButton1.Name = "radioButton1";
-            radioButton1.Size = new Size(60, 19);
-            radioButton1.TabIndex = 0;
-            radioButton1.Text = "Folder";
-            radioButton1.UseVisualStyleBackColor = true;
-            // 
-            // tabPage_video
-            // 
-            tabPage_video.Controls.Add(radioButton_videoFilesChecked);
-            tabPage_video.Controls.Add(radioButton_videoFolderChecked);
-            tabPage_video.Controls.Add(checkBox_repeatFile);
-            tabPage_video.Controls.Add(textBox_selectedVideoFolder);
-            tabPage_video.Controls.Add(textBox_selectedVideoFile);
-            tabPage_video.Controls.Add(button_selectVideoFolder);
-            tabPage_video.Controls.Add(button_selectVideoFile);
-            tabPage_video.Location = new Point(4, 24);
-            tabPage_video.Name = "tabPage_video";
-            tabPage_video.Size = new Size(768, 354);
-            tabPage_video.TabIndex = 2;
-            tabPage_video.Text = "Video";
-            tabPage_video.UseVisualStyleBackColor = true;
-            // 
-            // radioButton_videoFilesChecked
-            // 
-            radioButton_videoFilesChecked.AutoSize = true;
-            radioButton_videoFilesChecked.Checked = true;
-            radioButton_videoFilesChecked.Location = new Point(3, 58);
-            radioButton_videoFilesChecked.Name = "radioButton_videoFilesChecked";
-            radioButton_videoFilesChecked.Size = new Size(49, 19);
-            radioButton_videoFilesChecked.TabIndex = 10;
-            radioButton_videoFilesChecked.TabStop = true;
-            radioButton_videoFilesChecked.Text = "Files";
-            radioButton_videoFilesChecked.UseVisualStyleBackColor = true;
-            radioButton_videoFilesChecked.CheckedChanged += radioButton_videoFilesChecked_CheckedChanged;
-            // 
-            // radioButton_videoFolderChecked
-            // 
-            radioButton_videoFolderChecked.AutoSize = true;
-            radioButton_videoFolderChecked.Location = new Point(3, 29);
-            radioButton_videoFolderChecked.Name = "radioButton_videoFolderChecked";
-            radioButton_videoFolderChecked.Size = new Size(60, 19);
-            radioButton_videoFolderChecked.TabIndex = 11;
-            radioButton_videoFolderChecked.Text = "Folder";
-            radioButton_videoFolderChecked.UseVisualStyleBackColor = true;
-            radioButton_videoFolderChecked.CheckedChanged += radioButton_videoFolderChecked_CheckedChanged;
-            // 
-            // checkBox_repeatFile
-            // 
-            checkBox_repeatFile.AutoSize = true;
-            checkBox_repeatFile.Location = new Point(3, 3);
-            checkBox_repeatFile.Name = "checkBox_repeatFile";
-            checkBox_repeatFile.Size = new Size(88, 19);
-            checkBox_repeatFile.TabIndex = 9;
-            checkBox_repeatFile.Text = "Repeat File";
-            checkBox_repeatFile.UseVisualStyleBackColor = true;
-            checkBox_repeatFile.CheckedChanged += checkBox_repeatFile_CheckedChanged;
-            // 
-            // textBox_selectedVideoFolder
-            // 
-            textBox_selectedVideoFolder.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            textBox_selectedVideoFolder.Location = new Point(69, 28);
-            textBox_selectedVideoFolder.MaxLength = 4;
-            textBox_selectedVideoFolder.Name = "textBox_selectedVideoFolder";
-            textBox_selectedVideoFolder.ReadOnly = true;
-            textBox_selectedVideoFolder.Size = new Size(583, 23);
-            textBox_selectedVideoFolder.TabIndex = 8;
-            // 
-            // textBox_selectedVideoFile
-            // 
-            textBox_selectedVideoFile.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            textBox_selectedVideoFile.Location = new Point(69, 58);
-            textBox_selectedVideoFile.MaxLength = 4;
-            textBox_selectedVideoFile.Multiline = true;
-            textBox_selectedVideoFile.Name = "textBox_selectedVideoFile";
-            textBox_selectedVideoFile.ReadOnly = true;
-            textBox_selectedVideoFile.Size = new Size(583, 293);
-            textBox_selectedVideoFile.TabIndex = 8;
-            // 
-            // button_selectVideoFolder
-            // 
-            button_selectVideoFolder.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            button_selectVideoFolder.Location = new Point(658, 28);
-            button_selectVideoFolder.Name = "button_selectVideoFolder";
-            button_selectVideoFolder.Size = new Size(107, 23);
-            button_selectVideoFolder.TabIndex = 0;
-            button_selectVideoFolder.Text = "Select folder ...";
-            button_selectVideoFolder.UseVisualStyleBackColor = true;
-            button_selectVideoFolder.Click += button_selectVideoFolder_Click;
-            // 
-            // button_selectVideoFile
-            // 
-            button_selectVideoFile.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            button_selectVideoFile.Location = new Point(658, 57);
-            button_selectVideoFile.Name = "button_selectVideoFile";
-            button_selectVideoFile.Size = new Size(107, 23);
-            button_selectVideoFile.TabIndex = 0;
-            button_selectVideoFile.Text = "Select file ...";
-            button_selectVideoFile.UseVisualStyleBackColor = true;
-            button_selectVideoFile.Click += button_selectVideoFile_Click;
+            checkBox_flipHorizontal.CheckedChanged += CheckBox_flipHorizontal_CheckedChanged;
             // 
             // button_softCamStop
             // 
@@ -628,17 +399,14 @@
             ((System.ComponentModel.ISupportInitialize)pictureBox_cam).EndInit();
             tabControl1.ResumeLayout(false);
             tabPage_cam.ResumeLayout(false);
-            tabPage_cam.PerformLayout();
+            splitContainer1.Panel1.ResumeLayout(false);
+            splitContainer1.Panel1.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)splitContainer1).EndInit();
+            splitContainer1.ResumeLayout(false);
             tabPage_filters.ResumeLayout(false);
             tabPage_filters.PerformLayout();
             groupBox1.ResumeLayout(false);
             groupBox1.PerformLayout();
-            tabPage_desktop.ResumeLayout(false);
-            tabPage_desktop.PerformLayout();
-            tabPage_images.ResumeLayout(false);
-            tabPage_images.PerformLayout();
-            tabPage_video.ResumeLayout(false);
-            tabPage_video.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -653,8 +421,6 @@
         private TabControl tabControl1;
         private TabPage tabPage_cam;
         private Button button_camStop;
-        private TabPage tabPage_images;
-        private TabPage tabPage_video;
         private Button button_softCamStop;
         private Button button_softCamStart;
         private Label label_x;
@@ -665,27 +431,9 @@
         private Label label_currentSource;
         private TextBox textBox_currentSource;
         private ComboBox comboBox_camResolution;
-        private Button button2;
-        private Button button1;
-        private TextBox textBox2;
-        private TextBox textBox1;
-        private RadioButton radioButton2;
-        private RadioButton radioButton1;
         private FolderBrowserDialog folderBrowserDialog1;
         private OpenFileDialog openFileDialog1;
-        private TextBox textBox3;
-        private Label label3;
-        private Label label1;
         private CheckBox checkBox_showStream;
-        private TabPage tabPage_desktop;
-        private Button button_selectVideoFile;
-        private Button button_selectVideoFolder;
-        private CheckBox checkBox_showCursor;
-        private TextBox textBox_selectedVideoFile;
-        private CheckBox checkBox_repeatFile;
-        private TextBox textBox_selectedVideoFolder;
-        private RadioButton radioButton_videoFilesChecked;
-        private RadioButton radioButton_videoFolderChecked;
         private TabPage tabPage_filters;
         private CheckBox checkBox_flipVertical;
         private CheckBox checkBox_flipHorizontal;
@@ -694,5 +442,6 @@
         private RadioButton radioButton_rotate270;
         private RadioButton radioButton_rotate180;
         private RadioButton radioButton_rotate90;
+        private SplitContainer splitContainer1;
     }
 }

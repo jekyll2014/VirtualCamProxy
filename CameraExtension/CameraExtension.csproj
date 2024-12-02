@@ -1,18 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <UseWindowsForms>true</UseWindowsForms>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWindowsForms>true</UseWindowsForms>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="OpenCvSharp4.Extensions" Version="4.10.0.20241108" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="OpenCvSharp4.Extensions" Version="4.10.0.20241108" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\CameraLib\CameraLib.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\CameraLib\CameraLib.csproj" />
+	</ItemGroup>
 
 </Project>

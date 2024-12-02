@@ -1,4 +1,6 @@
-﻿namespace VirtualCamProxy;
+﻿using VirtualCamProxy.Settings;
+
+namespace VirtualCamProxy;
 
 public class CameraSettings
 {

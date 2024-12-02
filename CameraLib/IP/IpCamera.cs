@@ -8,16 +8,23 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
+
 using OpenCvSharp;
+
 using QuickNV.Onvif;
 using QuickNV.Onvif.Discovery;
 using QuickNV.Onvif.Media;
+
 using IPAddress = System.Net.IPAddress;
 
 namespace CameraLib.IP
 {
     public class IpCamera : ICamera, IDisposable
     {
+        public AuthType AuthenicationType { get; private set; }
+        public string Login { get; private set; }
+        public string Password { get; private set; }
+
         public CameraDescription Description { get; set; }
         public bool IsRunning { get; private set; } = false;
         public FrameFormat? CurrentFrameFormat { get; private set; }
@@ -54,8 +61,12 @@ namespace CameraLib.IP
             int discoveryTimeout = 1000,
             bool forceCameraConnect = false)
         {
-            if (authenicationType == AuthType.Plain)
-                path = string.Format(path, login, password);
+            AuthenicationType = authenicationType;
+            Login = login;
+            Password = password;
+
+            if (AuthenicationType == AuthType.Plain)
+                path = string.Format(path, Login, Password);
 
             name = string.IsNullOrEmpty(name)
                 ? Dns.GetHostAddresses(new Uri(path).Host).FirstOrDefault()?.ToString() ?? path
@@ -101,10 +112,8 @@ namespace CameraLib.IP
         public static async Task<List<CameraDescription>> DiscoverOnvifCamerasAsync(int discoveryTimeout)
         {
             var result = new List<CameraDescription>();
-
             var discovery = new DiscoveryController2(TimeSpan.FromMilliseconds(discoveryTimeout));
             var devices = await discovery.RunDiscovery();
-
             Console.WriteLine($"Found {devices.Length} cameras");
 
             if (devices.Length == 0)
@@ -147,10 +156,10 @@ namespace CameraLib.IP
                         $"{client.DeviceInformation.Manufacturer} {client.DeviceInformation.Model} [{device.EndPointAddress}]",
                         new FrameFormat[]
                         {
-                            new(profile.VideoEncoderConfiguration.Resolution.Width,
-                                profile.VideoEncoderConfiguration.Resolution.Height,
-                                profile.VideoEncoderConfiguration.Encoding.ToString(),
-                                profile.VideoEncoderConfiguration.RateControl.FrameRateLimit)
+                                new(profile.VideoEncoderConfiguration.Resolution.Width,
+                                    profile.VideoEncoderConfiguration.Resolution.Height,
+                                    profile.VideoEncoderConfiguration.Encoding.ToString(),
+                                    profile.VideoEncoderConfiguration.RateControl.FrameRateLimit)
                         }));
                 }
             }
