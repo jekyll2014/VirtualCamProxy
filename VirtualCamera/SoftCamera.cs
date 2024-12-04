@@ -63,7 +63,7 @@ namespace VirtualCamera
             ResolutionX = xResolution;
             ResolutionY = yResolution;
             _dllReg = new DllReg(dllName);
-            _dllReg.RegisterComDLL();
+            var registered = _dllReg.RegisterComDLL();
             _cam = scCreateCamera((UInt16)ResolutionX, (UInt16)ResolutionY, frameRate);
             _buffer = new byte[ResolutionX * ResolutionY * 3];
         }

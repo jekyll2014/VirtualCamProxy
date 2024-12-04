@@ -47,14 +47,28 @@ public class DllReg : IDisposable
         PointerToMethodInvoker drs =
                (PointerToMethodInvoker)Marshal.GetDelegateForFunctionPointer(dllEntryPoint,
                            typeof(PointerToMethodInvoker));
-        return drs() == 0;
+        try
+        {
+            var result = false;
+            Task.Run(() =>
+            {
+                result = drs() == 0;
+            }).Wait(5000);
+
+            return result;
+        }
+        catch
+        {
+            return false;
+        }
+
     }
 
     public void Dispose()
     {
         if (hLib != IntPtr.Zero)
         {
-            UnRegisterComDLL();
+            var result = UnRegisterComDLL();
             FreeLibrary(hLib);
             hLib = IntPtr.Zero;
         }
