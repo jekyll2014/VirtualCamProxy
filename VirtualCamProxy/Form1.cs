@@ -5,7 +5,7 @@ using CameraLib.IP;
 using CameraLib.MJPEG;
 
 using OpenCvSharp;
-
+using System.Security.Principal;
 using VirtualCamera;
 
 using VirtualCamProxy.Panels;
@@ -72,6 +72,9 @@ public partial class Form1 : Form
     {
         if (_settings.Width <= 0 || _settings.Height <= 0)
             return;
+
+        if (!IsAdministrator())
+            MessageBox.Show("Application is not running with Administator rights so please register the required .dll prior to starting the soft-camera:\r\n'regsvr32 softcam.dll'");
 
         var started = _cameraStarted;
         if (started)
@@ -315,6 +318,15 @@ public partial class Form1 : Form
     #endregion
 
     #region Utilities
+    public static bool IsAdministrator()
+    {
+        using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+        {
+            WindowsPrincipal principal = new WindowsPrincipal(identity);
+            return principal.IsInRole(WindowsBuiltInRole.Administrator);
+        }
+    }
+
     private async Task CameraFeed()
     {
         _cameraStarted = true;
@@ -373,7 +385,7 @@ public partial class Form1 : Form
             }
             else
             {
-                await Task.Delay(20);
+                await Task.Delay(1);
             }
         }
 
