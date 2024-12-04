@@ -27,16 +27,28 @@ public class ScreenCamera : ICamera, IDisposable
     // ToDo: Not implemented yet
     public bool ShowClicks = true;
 
+    public double Fps
+    {
+        get => _fps;
+        set
+        {
+            _fps = value;
+            _delay = (int)(1000 / _fps);
+        }
+    }
+
     private const string NamePrefix = "Desktop#";
     private CancellationTokenSource? _cancellationTokenSource;
     private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
 
-    private System.Windows.Forms.Screen Screen;
+    private Screen Screen;
     private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
-    private Mat? _frame;
+    private Mat? _frame = new Mat();
     private readonly Stopwatch _fpsTimer = new();
     private byte _frameCount;
+    private double _fps = 15;
+    private int _delay = 100;
 
     private readonly Timer _keepAliveTimer = new Timer();
     private int _width = 0;
@@ -46,14 +58,15 @@ public class ScreenCamera : ICamera, IDisposable
 
     private bool _disposedValue;
 
-    public ScreenCamera(string path, string name = "")
+    public ScreenCamera(string path, string name = "", double fps = 15)
     {
         if (string.IsNullOrEmpty(name))
             name = path.Replace("\\", "");
 
-        Screen = System.Windows.Forms.Screen.AllScreens.FirstOrDefault(n => n.DeviceName == path)
+        Screen = Screen.AllScreens.FirstOrDefault(n => n.DeviceName == path)
                      ?? throw new ArgumentException("Can not find camera", nameof(path));
 
+        Fps = fps;
         Description = new CameraDescription(CameraType.Screen, path, name, GetAllAvailableResolution(path));
         CurrentFps = Description.FrameFormats.FirstOrDefault()?.Fps ?? 15;
 
@@ -97,7 +110,7 @@ public class ScreenCamera : ICamera, IDisposable
     {
         return new List<FrameFormat>()
                 {
-                    new FrameFormat(Screen.Bounds.Width, Screen.Bounds.Height, $"{Screen.BitsPerPixel}bpp", 15)
+                    new FrameFormat(Screen.Bounds.Width, Screen.Bounds.Height, $"{Screen.BitsPerPixel}bpp", _fps)
                 };
     }
 
@@ -120,7 +133,7 @@ public class ScreenCamera : ICamera, IDisposable
         _keepAliveTimer.Start();
 
         _captureTask?.Dispose();
-        _captureTask = Task.Run(() =>
+        _captureTask = Task.Run(async () =>
         {
             var size = new Size(Screen.Bounds.Width, Screen.Bounds.Height);
             var srcImage = new Bitmap(size.Width, size.Height);
@@ -131,24 +144,26 @@ public class ScreenCamera : ICamera, IDisposable
             var dstGraphics = srcGraphics;
             var curSize = new Size(32, 32);
 
+            var nextFrameTime = new DateTimeOffset(DateTime.Now).ToUnixTimeMilliseconds();
             while (!_cancellationTokenSourceCameraGrabber.Token.IsCancellationRequested)
             {
-                srcGraphics.CopyFromScreen(Screen.Bounds.Left,
-                    Screen.Bounds.Top,
-                    0,
-                    0,
-                    size);
-
-                if (ShowCursor)
+                var now = new DateTimeOffset(DateTime.Now).ToUnixTimeMilliseconds();
+                if (now >= nextFrameTime)
                 {
-                    var cursorPosition = Cursor.Position;
-                    cursorPosition.X -= Screen.Bounds.Left;
-                    cursorPosition.Y -= Screen.Bounds.Top;
-                    Cursors.Default.Draw(srcGraphics, new Rectangle(cursorPosition, curSize));
-                }
+                    nextFrameTime += _delay;
+                    srcGraphics.CopyFromScreen(Screen.Bounds.Left, Screen.Bounds.Top, 0, 0, size);
+                    if (ShowCursor)
+                    {
+                        var cursorPosition = Cursor.Position;
+                        cursorPosition.X -= Screen.Bounds.Left;
+                        cursorPosition.Y -= Screen.Bounds.Top;
+                        Cursors.Default.Draw(srcGraphics, new Rectangle(cursorPosition, curSize));
+                    }
 
-                ImageCaptured(dstImage);
-                Task.Delay(50, _cancellationTokenSourceCameraGrabber.Token);
+                    ImageCaptured(dstImage);
+                }
+                else
+                    await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
             }
 
             srcImage.Dispose();

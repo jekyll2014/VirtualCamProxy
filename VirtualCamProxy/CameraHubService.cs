@@ -239,8 +239,8 @@ public class CameraHubService
     {
         if (ImageQueue.Count >= _maxBuffer)
         {
-            while (ImageQueue.TryDequeue(out var frame))
-                frame?.Dispose();
+            ImageQueue.TryDequeue(out var frame);
+            frame?.Dispose();
 
             // stop streaming if consumer can't cosume fast enough
             //UnHookCamera(camera.Description.Path);
@@ -254,8 +254,6 @@ public class CameraHubService
             //}
         }
 
-        ImageQueue.Enqueue(image.Clone());
-
-        image.Dispose();
+        ImageQueue.Enqueue(image);
     }
 }

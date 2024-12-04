@@ -183,12 +183,19 @@ public class ImageFileCamera : ICamera, IDisposable
         _captureTask?.Dispose();
         _captureTask = Task.Run(async () =>
         {
+            var nextFrameTime = new DateTimeOffset(DateTime.Now).ToUnixTimeMilliseconds();
             while (!_cancellationTokenSourceCameraGrabber.Token.IsCancellationRequested)
             {
-                ImageCaptured(_imageFile);
-                await Task.Delay(Delay, _cancellationTokenSourceCameraGrabber.Token);
-                if (!SetNextFile(RepeatFile))
-                    await _cancellationTokenSourceCameraGrabber.CancelAsync();
+                var now = new DateTimeOffset(DateTime.Now).ToUnixTimeMilliseconds();
+                if (now >= nextFrameTime)
+                {
+                    nextFrameTime += Delay;
+                    ImageCaptured(_imageFile);
+                    if (!SetNextFile(RepeatFile))
+                        await _cancellationTokenSourceCameraGrabber.CancelAsync();
+                }
+                else
+                    await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
             }
 
             Stop(true);

@@ -176,16 +176,20 @@ public class VideoFileCamera : ICamera, IDisposable
         _captureTask = Task.Run(async () =>
         {
             _delay = (int)(1000 / _videoFile?.Fps ?? 25);
-
+            var nextFrameTime = new DateTimeOffset(DateTime.Now).ToUnixTimeMilliseconds();
             while (!_cancellationTokenSourceCameraGrabber.Token.IsCancellationRequested)
             {
-                if (_videoFile?.Grab() ?? false)
+                var now = new DateTimeOffset(DateTime.Now).ToUnixTimeMilliseconds();
+                if (now >= nextFrameTime)
                 {
-                    ImageCaptured();
-                    await Task.Delay(_delay, _cancellationTokenSourceCameraGrabber.Token);
+                    nextFrameTime += _delay;
+                    if (_videoFile?.Grab() ?? false)
+                        ImageCaptured();
+                    else if (!SetNextFile(RepeatFile))
+                        await _cancellationTokenSourceCameraGrabber.CancelAsync();
                 }
-                else if (!SetNextFile(RepeatFile))
-                    await _cancellationTokenSourceCameraGrabber.CancelAsync();
+                else
+                    await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
             }
 
             Stop(true);

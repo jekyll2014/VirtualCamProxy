@@ -161,13 +161,12 @@ namespace CameraLib.USB
                 return false;
             }
 
-            if (_captureDevice == null)
+            if (_captureDevice == null || _usbCamera == null)
             {
                 return false;
             }
 
-            if (_usbCamera == null)
-                return false;
+            _frame = new Mat();
 
             if (width > 0 && height > 0)
             {
@@ -202,14 +201,14 @@ namespace CameraLib.USB
             _keepAliveTimer.Start();
 
             _captureTask?.Dispose();
-            _captureTask = Task.Run(() =>
+            _captureTask = Task.Run(async () =>
             {
                 while (!_cancellationTokenSourceCameraGrabber.Token.IsCancellationRequested)
                 {
                     if (_captureDevice.Grab())
                         ImageCaptured();
                     else
-                        Task.Delay(10, _cancellationTokenSourceCameraGrabber.Token);
+                        await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
                 }
             }, _cancellationTokenSourceCameraGrabber.Token);
 
@@ -238,8 +237,6 @@ namespace CameraLib.USB
             {
                 lock (_getPictureThreadLock)
                 {
-                    _frame?.Dispose();
-                    _frame = new Mat();
                     if (!(_captureDevice?.Retrieve(_frame) ?? false))
                         return;
 
@@ -302,6 +299,7 @@ namespace CameraLib.USB
                 CurrentFrameFormat = null;
                 _fpsTimer.Reset();
                 IsRunning = false;
+                _frame?.Dispose();
             }
         }
 
