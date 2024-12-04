@@ -59,7 +59,7 @@
             groupBox1.Dock = DockStyle.Fill;
             groupBox1.Location = new Point(0, 0);
             groupBox1.Name = "groupBox1";
-            groupBox1.Size = new Size(404, 409);
+            groupBox1.Size = new Size(247, 222);
             groupBox1.TabIndex = 0;
             groupBox1.TabStop = false;
             groupBox1.Text = "IP Camera properties";
@@ -70,7 +70,7 @@
             textBox_password.Location = new Point(66, 132);
             textBox_password.Name = "textBox_password";
             textBox_password.ReadOnly = true;
-            textBox_password.Size = new Size(332, 23);
+            textBox_password.Size = new Size(175, 23);
             textBox_password.TabIndex = 4;
             // 
             // textBox_login
@@ -79,7 +79,7 @@
             textBox_login.Location = new Point(66, 103);
             textBox_login.Name = "textBox_login";
             textBox_login.ReadOnly = true;
-            textBox_login.Size = new Size(332, 23);
+            textBox_login.Size = new Size(175, 23);
             textBox_login.TabIndex = 4;
             // 
             // label5
@@ -87,7 +87,7 @@
             label5.AutoSize = true;
             label5.Location = new Point(6, 135);
             label5.Name = "label5";
-            label5.Size = new Size(59, 15);
+            label5.Size = new Size(57, 15);
             label5.TabIndex = 2;
             label5.Text = "Password";
             // 
@@ -97,7 +97,7 @@
             textBox_auth.Location = new Point(66, 74);
             textBox_auth.Name = "textBox_auth";
             textBox_auth.ReadOnly = true;
-            textBox_auth.Size = new Size(332, 23);
+            textBox_auth.Size = new Size(175, 23);
             textBox_auth.TabIndex = 4;
             // 
             // label4
@@ -115,7 +115,7 @@
             textBox_name.Location = new Point(66, 45);
             textBox_name.Name = "textBox_name";
             textBox_name.ReadOnly = true;
-            textBox_name.Size = new Size(332, 23);
+            textBox_name.Size = new Size(175, 23);
             textBox_name.TabIndex = 4;
             // 
             // label3
@@ -123,7 +123,7 @@
             label3.AutoSize = true;
             label3.Location = new Point(6, 77);
             label3.Name = "label3";
-            label3.Size = new Size(34, 15);
+            label3.Size = new Size(33, 15);
             label3.TabIndex = 2;
             label3.Text = "Auth";
             // 
@@ -133,7 +133,7 @@
             textBox_path.Location = new Point(66, 16);
             textBox_path.Name = "textBox_path";
             textBox_path.ReadOnly = true;
-            textBox_path.Size = new Size(332, 23);
+            textBox_path.Size = new Size(175, 23);
             textBox_path.TabIndex = 5;
             // 
             // label2
@@ -141,7 +141,7 @@
             label2.AutoSize = true;
             label2.Location = new Point(6, 48);
             label2.Name = "label2";
-            label2.Size = new Size(40, 15);
+            label2.Size = new Size(39, 15);
             label2.TabIndex = 2;
             label2.Text = "Name";
             // 
@@ -150,7 +150,7 @@
             label1.AutoSize = true;
             label1.Location = new Point(6, 19);
             label1.Name = "label1";
-            label1.Size = new Size(32, 15);
+            label1.Size = new Size(31, 15);
             label1.TabIndex = 3;
             label1.Text = "Path";
             // 
@@ -161,7 +161,7 @@
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
             Controls.Add(groupBox1);
             Name = "IpCameraPropertyPanel";
-            Size = new Size(404, 409);
+            Size = new Size(247, 222);
             groupBox1.ResumeLayout(false);
             groupBox1.PerformLayout();
             ResumeLayout(false);

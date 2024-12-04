@@ -37,6 +37,13 @@ public partial class Form1 : Form
 
     private void Form1_Load(object sender, EventArgs e)
     {
+        var filterPAnel = new FiltersPanel(_settings.Filters)
+        {
+            Dock = DockStyle.Fill
+        };
+
+        tabControl2.TabPages[1].Controls.Add(filterPAnel);
+
         _cameraHub = new CameraHubService(_settings.Cameras);
         textBox_x.Text = _settings.Width.ToString();
         textBox_y.Text = _settings.Height.ToString();
@@ -236,6 +243,78 @@ public partial class Form1 : Form
         }
     }
 
+    private void TextBox_x_TextChanged(object sender, EventArgs e)
+    {
+        if (int.TryParse(textBox_x.Text, out var softCamWidth))
+            _settings.Width = softCamWidth;
+        else
+            textBox_x.Text = _settings.Width.ToString();
+    }
+
+    private void TextBox_y_TextChanged(object sender, EventArgs e)
+    {
+        if (int.TryParse(textBox_y.Text, out var softCamHeigth))
+            _settings.Height = softCamHeigth;
+        else
+            textBox_y.Text = _settings.Height.ToString();
+    }
+
+    private void CheckBox_showStream_CheckedChanged(object sender, EventArgs e)
+    {
+        _settings.ShowStream = checkBox_showStream.Checked;
+    }
+
+    private void ComboBox_cameras_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        comboBox_camResolution.Items.Clear();
+        var camera = _cameraHub.GetCamera(comboBox_cameras.SelectedIndex);
+        if (camera == null)
+            return;
+
+        var cameraFormats = camera.Description.FrameFormats;
+        foreach (var format in cameraFormats)
+            comboBox_camResolution.Items.Add($"{format.Width}x{format.Height} {format.Format} {format.Fps}fps");
+
+        if (comboBox_camResolution.Items.Count > 0)
+        {
+            comboBox_camResolution.SelectedIndex = 0;
+            button_camStart.Enabled = true;
+            button_camStop.Enabled = false;
+            button_camGetImage.Enabled = true;
+            button_refresh.Enabled = true;
+            comboBox_cameras.Enabled = true;
+        }
+        else
+        {
+            button_camStart.Enabled = false;
+            button_camStop.Enabled = false;
+            button_camGetImage.Enabled = false;
+            button_refresh.Enabled = true;
+            comboBox_cameras.Enabled = true;
+            textBox_currentSource.Clear();
+        }
+
+        UserControl uiControl;
+        if (camera is ScreenCamera)
+            uiControl = new DesktopCameraSettingsPanel(_settings.DesktopCamera, _cameraHub);
+        else if (camera is VideoFileCamera)
+            uiControl = new VideoFilePanel(_settings.VideoFileCamera, _cameraHub);
+        else if (camera is ImageFileCamera)
+            uiControl = new ImageFilePanel(_settings.ImageFileCamera, _cameraHub);
+        else if (camera is IpCamera ipCam)
+            uiControl = new IpCameraPropertyPanel(ipCam);
+        else if (camera is MjpegCamera mCam)
+            uiControl = new MjpegCameraPropertyPanel(mCam);
+        else
+            uiControl = new CommonCameraPropertyPanel(camera);
+
+        uiControl.Dock = DockStyle.Fill;
+        tabControl2.TabPages[0].Controls.Clear();
+        tabControl2.TabPages[0].Controls.Add(uiControl);
+    }
+    #endregion
+
+    #region Utilities
     private async Task CameraFeed()
     {
         _cameraStarted = true;
@@ -345,107 +424,6 @@ public partial class Form1 : Form
         {
             return (Bitmap)Image.FromStream(ms);
         }
-    }
-
-    private void TextBox_x_TextChanged(object sender, EventArgs e)
-    {
-        if (int.TryParse(textBox_x.Text, out var softCamWidth))
-            _settings.Width = softCamWidth;
-        else
-            textBox_x.Text = _settings.Width.ToString();
-    }
-
-    private void TextBox_y_TextChanged(object sender, EventArgs e)
-    {
-        if (int.TryParse(textBox_y.Text, out var softCamHeigth))
-            _settings.Height = softCamHeigth;
-        else
-            textBox_y.Text = _settings.Height.ToString();
-    }
-
-    private void CheckBox_showStream_CheckedChanged(object sender, EventArgs e)
-    {
-        _settings.ShowStream = checkBox_showStream.Checked;
-    }
-
-    private void ComboBox_cameras_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        comboBox_camResolution.Items.Clear();
-        var camera = _cameraHub.GetCamera(comboBox_cameras.SelectedIndex);
-        if (camera == null)
-            return;
-
-        var cameraFormats = camera.Description.FrameFormats;
-        foreach (var format in cameraFormats)
-            comboBox_camResolution.Items.Add($"{format.Width}x{format.Height} {format.Format} {format.Fps}fps");
-
-        if (comboBox_camResolution.Items.Count > 0)
-        {
-            comboBox_camResolution.SelectedIndex = 0;
-            button_camStart.Enabled = true;
-            button_camStop.Enabled = false;
-            button_camGetImage.Enabled = true;
-            button_refresh.Enabled = true;
-            comboBox_cameras.Enabled = true;
-            UserControl uiControl;
-            if (camera is ScreenCamera)
-                uiControl = new DesktopCameraSettingsPanel(_settings.DesktopCamera, _cameraHub);
-            else if (camera is VideoFileCamera)
-                uiControl = new VideoFilePanel(_settings.VideoFileCamera, _cameraHub);
-            else if (camera is ImageFileCamera)
-                uiControl = new ImageFilePanel(_settings.ImageFileCamera, _cameraHub);
-            else if (camera is IpCamera ipCam)
-                uiControl = new IpCameraPropertyPanel(ipCam);
-            else if (camera is MjpegCamera mCam)
-                uiControl = new MjpegCameraPropertyPanel(mCam);
-            else
-                uiControl = new CommonCameraPropertyPanel(camera);
-
-            uiControl.AutoSize = true;
-            splitContainer1.Panel2.Controls.Clear();
-            splitContainer1.Panel2.Controls.Add(uiControl);
-        }
-        else
-        {
-            button_camStart.Enabled = false;
-            button_camStop.Enabled = false;
-            button_camGetImage.Enabled = false;
-            button_refresh.Enabled = true;
-            comboBox_cameras.Enabled = true;
-            textBox_currentSource.Clear();
-        }
-    }
-    #endregion
-
-    #region Filters tab
-    private void CheckBox_flipHorizontal_CheckedChanged(object sender, EventArgs e)
-    {
-        _settings.Filters.FlipHorizontal = checkBox_flipHorizontal.Checked;
-    }
-
-    private void CheckBox_flipVertical_CheckedChanged(object sender, EventArgs e)
-    {
-        _settings.Filters.FlipVertical = checkBox_flipVertical.Checked;
-    }
-
-    private void RadioButton_rotateNone_CheckedChanged(object sender, EventArgs e)
-    {
-        _settings.Filters.Rotate = null;
-    }
-
-    private void RadioButton_rotate90_CheckedChanged(object sender, EventArgs e)
-    {
-        _settings.Filters.Rotate = RotateFlags.Rotate90Clockwise;
-    }
-
-    private void RadioButton_rotate180_CheckedChanged(object sender, EventArgs e)
-    {
-        _settings.Filters.Rotate = RotateFlags.Rotate180;
-    }
-
-    private void RadioButton_rotate270_CheckedChanged(object sender, EventArgs e)
-    {
-        _settings.Filters.Rotate = RotateFlags.Rotate90Counterclockwise;
     }
     #endregion
 }

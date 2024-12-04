@@ -62,7 +62,7 @@
             groupBox1.Size = new Size(404, 409);
             groupBox1.TabIndex = 0;
             groupBox1.TabStop = false;
-            groupBox1.Text = "IP Camera properties";
+            groupBox1.Text = "MJPEG Camera properties";
             // 
             // textBox_password
             // 
@@ -87,7 +87,7 @@
             label5.AutoSize = true;
             label5.Location = new Point(6, 135);
             label5.Name = "label5";
-            label5.Size = new Size(59, 15);
+            label5.Size = new Size(57, 15);
             label5.TabIndex = 2;
             label5.Text = "Password";
             // 
@@ -123,7 +123,7 @@
             label3.AutoSize = true;
             label3.Location = new Point(6, 77);
             label3.Name = "label3";
-            label3.Size = new Size(34, 15);
+            label3.Size = new Size(33, 15);
             label3.TabIndex = 2;
             label3.Text = "Auth";
             // 
@@ -141,7 +141,7 @@
             label2.AutoSize = true;
             label2.Location = new Point(6, 48);
             label2.Name = "label2";
-            label2.Size = new Size(40, 15);
+            label2.Size = new Size(39, 15);
             label2.TabIndex = 2;
             label2.Text = "Name";
             // 
@@ -150,7 +150,7 @@
             label1.AutoSize = true;
             label1.Location = new Point(6, 19);
             label1.Name = "label1";
-            label1.Size = new Size(32, 15);
+            label1.Size = new Size(31, 15);
             label1.TabIndex = 3;
             label1.Text = "Path";
             // 
