@@ -40,7 +40,6 @@ namespace CameraLib.MJPEG
         private CancellationTokenSource? _cancellationTokenSource;
 
         private readonly object _getPictureThreadLock = new object();
-        private Mat? _frame;
         private Task? _imageGrabber;
         private volatile bool _stopCapture = false;
         private readonly Stopwatch _fpsTimer = new();
@@ -103,13 +102,13 @@ namespace CameraLib.MJPEG
             _keepAliveTimer.Elapsed += CameraDisconnected;
         }
 
-        private void CameraDisconnected(object? sender, ElapsedEventArgs e)
+        private async void CameraDisconnected(object? sender, ElapsedEventArgs e)
         {
             if (_fpsTimer.ElapsedMilliseconds > FrameTimeout)
             {
                 Console.WriteLine($"{DateTime.Now.ToShortDateString()} {DateTime.Now.ToLongTimeString()} Camera connection restarted ({_fpsTimer.ElapsedMilliseconds} timeout)");
                 Stop(false);
-                Start(_width, _height, _format, _token);
+                await Start(_width, _height, _format, _token);
             }
         }
 
@@ -152,7 +151,7 @@ namespace CameraLib.MJPEG
             _stopCapture = false;
             try
             {
-                _imageGrabber = StartAsync(Description.Path, AuthenicationType, Login, Password, token);
+                await StartAsync(Description.Path, AuthenicationType, Login, Password, token);
             }
             catch (Exception ex)
             {
@@ -160,7 +159,6 @@ namespace CameraLib.MJPEG
 
                 return false;
             }
-
 
             IsRunning = true;
 
@@ -189,7 +187,6 @@ namespace CameraLib.MJPEG
                 while (IsRunning && DateTime.Now < timeOut)
                     Task.Delay(10);
 
-                _frame?.Dispose();
                 CurrentFrameFormat = null;
                 _fpsTimer.Reset();
             }
@@ -199,13 +196,19 @@ namespace CameraLib.MJPEG
         {
             if (IsRunning)
             {
-                while (IsRunning && _frame == null && !token.IsCancellationRequested)
+                Mat? frame = null;
+                ImageCapturedEvent += Camera_ImageCapturedEvent;
+                void Camera_ImageCapturedEvent(ICamera camera, Mat image)
+                {
+                    frame = image?.Clone();
+                }
+
+                while (IsRunning && frame == null && !token.IsCancellationRequested)
                     await Task.Delay(10, token);
 
-                lock (_getPictureThreadLock)
-                {
-                    return _frame?.Clone();
-                }
+                ImageCapturedEvent -= Camera_ImageCapturedEvent;
+
+                return frame;
             }
 
             var image = new Mat();
@@ -231,14 +234,9 @@ namespace CameraLib.MJPEG
             {
                 var image = await GrabFrame(token);
                 if (image == null)
-                {
-                    await Task.Delay(100, token);
-                }
+                    await Task.Delay(10, token);
                 else
-                {
-                    yield return image.Clone();
-                    image.Dispose();
-                }
+                    yield return image;
             }
         }
 
@@ -360,13 +358,12 @@ namespace CameraLib.MJPEG
 
                     lock (_getPictureThreadLock)
                     {
-                        _frame?.Dispose();
-                        _frame = new Mat();
                         try
                         {
-                            _frame = Cv2.ImDecode(frameBuffer, ImreadModes.Color);
-                            CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
-                            ImageCapturedEvent?.Invoke(this, _frame.Clone());
+                            var frame = Cv2.ImDecode(frameBuffer, ImreadModes.Color);
+                            CurrentFrameFormat ??= new FrameFormat(frame.Width, frame.Height);
+                            ImageCapturedEvent?.Invoke(this, frame);
+
                             if (!_fpsTimer.IsRunning)
                             {
                                 _fpsTimer.Start();
@@ -455,7 +452,6 @@ namespace CameraLib.MJPEG
                     _keepAliveTimer.Close();
                     _keepAliveTimer.Dispose();
                     _cancellationTokenSource?.Dispose();
-                    _frame?.Dispose();
                 }
 
                 _disposedValue = true;

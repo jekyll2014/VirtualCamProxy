@@ -44,7 +44,6 @@ public class ScreenCamera : ICamera, IDisposable
     private Screen Screen;
     private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
-    private Mat? _frame = new Mat();
     private readonly Stopwatch _fpsTimer = new();
     private byte _frameCount;
     private double _fps = 15;
@@ -55,6 +54,7 @@ public class ScreenCamera : ICamera, IDisposable
     private int _height = 0;
     private string _format = string.Empty;
     private CancellationToken _token = CancellationToken.None;
+    private int _gcCounter = 0;
 
     private bool _disposedValue;
 
@@ -73,13 +73,13 @@ public class ScreenCamera : ICamera, IDisposable
         _keepAliveTimer.Elapsed += CameraDisconnected;
     }
 
-    private void CameraDisconnected(object? sender, ElapsedEventArgs e)
+    private async void CameraDisconnected(object? sender, ElapsedEventArgs e)
     {
         if (_fpsTimer.ElapsedMilliseconds > FrameTimeout)
         {
             Console.WriteLine($"{DateTime.Now.ToShortDateString()} {DateTime.Now.ToLongTimeString()} Camera connection restarted ({_fpsTimer.ElapsedMilliseconds} timeout)");
             Stop(false);
-            Start(_width, _height, _format, _token);
+            await Start(_width, _height, _format, _token);
         }
     }
 
@@ -186,15 +186,14 @@ public class ScreenCamera : ICamera, IDisposable
         {
             lock (_getPictureThreadLock)
             {
-                _frame?.Dispose();
-                _frame = BitmapToMap(image);
+                var frame = BitmapToMap(image);
+                if (frame == null)
+                    return;
 
-                if (CurrentFrameFormat == null)
-                {
-                    CurrentFrameFormat = new FrameFormat(_frame.Width, _frame.Height);
-                }
+                CurrentFrameFormat ??= new FrameFormat(frame.Width, frame.Height);
 
-                ImageCapturedEvent?.Invoke(this, _frame.Clone());
+                ImageCapturedEvent?.Invoke(this, frame);
+
                 if (!_fpsTimer.IsRunning)
                 {
                     _fpsTimer.Start();
@@ -212,7 +211,13 @@ public class ScreenCamera : ICamera, IDisposable
                         _frameCount = 0;
                     }
                 }
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
+
+                _gcCounter++;
+                if (_gcCounter >= 10)
+                {
+                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
+                    _gcCounter = 0;
+                }
             }
         }
         catch
@@ -226,7 +231,6 @@ public class ScreenCamera : ICamera, IDisposable
         if (image.PixelFormat != PixelFormat.Format24bppRgb)
             image = BitmapTo24bpp(image);
 
-        //return image.ToMat().CvtColor(ColorConversionCodes.RGBA2RGB);
         return image.ToMat();
     }
 
@@ -269,16 +273,21 @@ public class ScreenCamera : ICamera, IDisposable
     {
         if (IsRunning)
         {
-            while (IsRunning && _frame == null && !token.IsCancellationRequested)
+            Mat? frame = null;
+            ImageCapturedEvent += Camera_ImageCapturedEvent;
+            void Camera_ImageCapturedEvent(ICamera camera, Mat image)
+            {
+                frame = image?.Clone();
+            }
+
+            while (IsRunning && frame == null && !token.IsCancellationRequested)
                 await Task.Delay(10, token);
 
-            lock (_getPictureThreadLock)
-            {
-                return _frame?.Clone();
-            }
+            ImageCapturedEvent -= Camera_ImageCapturedEvent;
+
+            return frame;
         }
 
-        Mat? image = null;
         var size = new Size(Screen.Bounds.Width, Screen.Bounds.Height);
         var srcImage = new Bitmap(size.Width, size.Height);
         var srcGraphics = Graphics.FromImage(srcImage);
@@ -289,9 +298,7 @@ public class ScreenCamera : ICamera, IDisposable
         if (ShowCursor)
             Cursors.Default.Draw(srcGraphics, new Rectangle(Cursor.Position, curSize));
 
-        image = BitmapToMap(srcImage);
-        srcImage.Dispose();
-        srcGraphics.Dispose();
+        var image = BitmapToMap(srcImage);
         srcImage.Dispose();
         srcGraphics.Dispose();
 
@@ -304,14 +311,9 @@ public class ScreenCamera : ICamera, IDisposable
         {
             var image = await GrabFrame(token);
             if (image == null)
-            {
-                await Task.Delay(100, token);
-            }
+                await Task.Delay(10, token);
             else
-            {
-                yield return image.Clone();
-                image.Dispose();
-            }
+                yield return image;
         }
     }
 
@@ -367,7 +369,6 @@ public class ScreenCamera : ICamera, IDisposable
                 _keepAliveTimer.Dispose();
                 _cancellationTokenSourceCameraGrabber?.Dispose();
                 _cancellationTokenSource?.Dispose();
-                _frame?.Dispose();
             }
 
             _disposedValue = true;

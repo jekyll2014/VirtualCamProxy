@@ -29,7 +29,6 @@ public class ImageFileCamera : ICamera, IDisposable
 
     private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
-    private Mat _frame = new Mat();
     private readonly Stopwatch _fpsTimer = new();
     private byte _frameCount;
 
@@ -40,6 +39,7 @@ public class ImageFileCamera : ICamera, IDisposable
     private readonly Timer _keepAliveTimer = new Timer();
     private string _format = string.Empty;
     private CancellationToken _token = CancellationToken.None;
+    private int _gcCounter = 0;
 
     private bool _disposedValue;
 
@@ -83,8 +83,8 @@ public class ImageFileCamera : ICamera, IDisposable
                 GetAllAvailableResolution(file));
 
             CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
-            CurrentFps = CurrentFrameFormat.Fps;
-            _format = CurrentFrameFormat.Format;
+            CurrentFps = CurrentFrameFormat?.Fps ?? 0;
+            _format = CurrentFrameFormat?.Format ?? string.Empty;
         }
     }
 
@@ -115,19 +115,19 @@ public class ImageFileCamera : ICamera, IDisposable
             GetAllAvailableResolution(_imageFile));
 
         CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
-        CurrentFps = CurrentFrameFormat.Fps;
-        _format = CurrentFrameFormat.Format;
+        CurrentFps = CurrentFrameFormat?.Fps ?? 0;
+        _format = CurrentFrameFormat?.Format ?? string.Empty;
 
         return true;
     }
 
-    private void CameraDisconnected(object? sender, ElapsedEventArgs e)
+    private async void CameraDisconnected(object? sender, ElapsedEventArgs e)
     {
         if (_fpsTimer.ElapsedMilliseconds > FrameTimeout)
         {
             Console.WriteLine($"{DateTime.Now.ToShortDateString()} {DateTime.Now.ToLongTimeString()} Camera connection restarted ({_fpsTimer.ElapsedMilliseconds} timeout)");
             Stop(false);
-            Start(0, 0, _format, _token);
+            await Start(0, 0, _format, _token);
         }
     }
 
@@ -190,7 +190,7 @@ public class ImageFileCamera : ICamera, IDisposable
                 if (now >= nextFrameTime)
                 {
                     nextFrameTime += Delay;
-                    ImageCaptured(_imageFile);
+                    CaptureImage(_imageFile);
                     if (!SetNextFile(RepeatFile))
                         await _cancellationTokenSourceCameraGrabber.CancelAsync();
                 }
@@ -206,7 +206,7 @@ public class ImageFileCamera : ICamera, IDisposable
         return true;
     }
 
-    private void ImageCaptured(string file)
+    private void CaptureImage(string file)
     {
         if (Monitor.IsEntered(_getPictureThreadLock))
             return;
@@ -215,22 +215,20 @@ public class ImageFileCamera : ICamera, IDisposable
         {
             lock (_getPictureThreadLock)
             {
-                _frame?.Dispose();
+                Mat? frame = null;
                 try
                 {
-                    _frame = Cv2.ImRead(file, ImreadModes.Color);
+                    frame = Cv2.ImRead(file, ImreadModes.Color);
                 }
                 catch { }
 
-                if (_frame == null)
+                if (frame == null)
                     return;
 
-                if (CurrentFrameFormat == null)
-                {
-                    CurrentFrameFormat = new FrameFormat(_frame.Width, _frame.Height);
-                }
+                CurrentFrameFormat ??= new FrameFormat(frame.Width, frame.Height);
 
-                ImageCapturedEvent?.Invoke(this, _frame.Clone());
+                ImageCapturedEvent?.Invoke(this, frame);
+
                 if (!_fpsTimer.IsRunning)
                 {
                     _fpsTimer.Start();
@@ -248,7 +246,13 @@ public class ImageFileCamera : ICamera, IDisposable
                         _frameCount = 0;
                     }
                 }
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
+
+                _gcCounter++;
+                if (_gcCounter >= 10)
+                {
+                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
+                    _gcCounter = 0;
+                }
             }
         }
         catch
@@ -287,22 +291,23 @@ public class ImageFileCamera : ICamera, IDisposable
     {
         if (IsRunning)
         {
-            while (IsRunning && _frame == null && !token.IsCancellationRequested)
+            Mat? frame = null;
+            ImageCapturedEvent += Camera_ImageCapturedEvent;
+            void Camera_ImageCapturedEvent(ICamera camera, Mat image)
+            {
+                frame = image?.Clone();
+            }
+
+            while (IsRunning && frame == null && !token.IsCancellationRequested)
                 await Task.Delay(10, token);
 
-            lock (_getPictureThreadLock)
-            {
-                return _frame?.Clone();
-            }
+            ImageCapturedEvent -= Camera_ImageCapturedEvent;
+
+            return frame;
         }
 
         if (string.IsNullOrEmpty(_imageFile) || !File.Exists(_imageFile))
-            SetFile(_fileNames);
-
-        if (string.IsNullOrEmpty(_imageFile) || !File.Exists(_imageFile))
-        {
             SetNextFile(true);
-        }
 
         Mat? image = null;
         try
@@ -320,14 +325,9 @@ public class ImageFileCamera : ICamera, IDisposable
         {
             var image = await GrabFrame(token);
             if (image == null)
-            {
-                await Task.Delay(100, token);
-            }
+                await Task.Delay(10, token);
             else
-            {
-                yield return image.Clone();
-                image.Dispose();
-            }
+                yield return image;
         }
     }
 
@@ -383,7 +383,6 @@ public class ImageFileCamera : ICamera, IDisposable
                 _keepAliveTimer.Dispose();
                 _cancellationTokenSourceCameraGrabber?.Dispose();
                 _cancellationTokenSource?.Dispose();
-                _frame?.Dispose();
             }
 
             _disposedValue = true;

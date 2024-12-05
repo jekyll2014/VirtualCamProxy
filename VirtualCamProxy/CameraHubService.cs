@@ -239,19 +239,8 @@ public class CameraHubService
     {
         if (ImageQueue.Count >= _maxBuffer)
         {
-            ImageQueue.TryDequeue(out var frame);
-            frame?.Dispose();
-
-            // stop streaming if consumer can't cosume fast enough
-            //UnHookCamera(camera.Description.Path);
-
-            // clear the image queue
-            //clientStreams.TryRemove(clientStream);
-            //if (clientStreams.Count <= 0)
-            //{
-            //    cameraStream.ImageCapturedEvent -= GetImageFromCameraStream;
-            //    cameraStream.Stop(CancellationToken.None);
-            //}
+            if (ImageQueue.TryDequeue(out var frame))
+                frame?.Dispose();
         }
 
         ImageQueue.Enqueue(image);

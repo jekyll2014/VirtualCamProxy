@@ -29,7 +29,6 @@ public class VideoFileCamera : ICamera, IDisposable
 
     private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
-    private Mat _frame = new Mat();
     private readonly Stopwatch _fpsTimer = new();
     private byte _frameCount;
 
@@ -40,6 +39,7 @@ public class VideoFileCamera : ICamera, IDisposable
     private readonly Timer _keepAliveTimer = new Timer();
     private string _format = string.Empty;
     private CancellationToken _token = CancellationToken.None;
+    private int _gcCounter = 0;
 
     private bool _disposedValue;
 
@@ -84,8 +84,8 @@ public class VideoFileCamera : ICamera, IDisposable
                 GetAllAvailableResolution(file));
 
             CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
-            CurrentFps = CurrentFrameFormat.Fps;
-            _format = CurrentFrameFormat.Format;
+            CurrentFps = CurrentFrameFormat?.Fps ?? 0;
+            _format = CurrentFrameFormat?.Format ?? string.Empty;
             _delay = (int)(1000 / _videoFile?.Fps ?? 25);
         }
     }
@@ -119,20 +119,20 @@ public class VideoFileCamera : ICamera, IDisposable
             GetAllAvailableResolution(file));
 
         CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
-        CurrentFps = CurrentFrameFormat.Fps;
-        _format = CurrentFrameFormat.Format;
+        CurrentFps = CurrentFrameFormat?.Fps ?? 0;
+        _format = CurrentFrameFormat?.Format ?? string.Empty;
         _delay = (int)(1000 / _videoFile?.Fps ?? 25);
 
         return true;
     }
 
-    private void CameraDisconnected(object? sender, ElapsedEventArgs e)
+    private async void CameraDisconnected(object? sender, ElapsedEventArgs e)
     {
         if (_fpsTimer.ElapsedMilliseconds > FrameTimeout)
         {
             Console.WriteLine($"{DateTime.Now.ToShortDateString()} {DateTime.Now.ToLongTimeString()} Camera connection restarted ({_fpsTimer.ElapsedMilliseconds} timeout)");
             Stop(false);
-            Start(0, 0, _format, _token);
+            await Start(0, 0, _format, _token);
         }
     }
 
@@ -184,7 +184,7 @@ public class VideoFileCamera : ICamera, IDisposable
                 {
                     nextFrameTime += _delay;
                     if (_videoFile?.Grab() ?? false)
-                        ImageCaptured();
+                        CaptureImage();
                     else if (!SetNextFile(RepeatFile))
                         await _cancellationTokenSourceCameraGrabber.CancelAsync();
                 }
@@ -200,7 +200,7 @@ public class VideoFileCamera : ICamera, IDisposable
         return true;
     }
 
-    private void ImageCaptured()
+    private void CaptureImage()
     {
         if (Monitor.IsEntered(_getPictureThreadLock))
             return;
@@ -209,18 +209,14 @@ public class VideoFileCamera : ICamera, IDisposable
         {
             lock (_getPictureThreadLock)
             {
-                _frame?.Dispose();
-                _frame = new Mat();
-
-                if (!(_videoFile?.Retrieve(_frame) ?? false))
+                var frame = new Mat();
+                if (!(_videoFile?.Retrieve(frame) ?? false) || frame == null)
                     return;
 
-                if (CurrentFrameFormat == null)
-                {
-                    CurrentFrameFormat = new FrameFormat(_frame.Width, _frame.Height);
-                }
+                CurrentFrameFormat ??= new FrameFormat(frame.Width, frame.Height);
 
-                ImageCapturedEvent?.Invoke(this, _frame.Clone());
+                ImageCapturedEvent?.Invoke(this, frame);
+
                 if (!_fpsTimer.IsRunning)
                 {
                     _fpsTimer.Start();
@@ -238,7 +234,13 @@ public class VideoFileCamera : ICamera, IDisposable
                         _frameCount = 0;
                     }
                 }
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
+
+                _gcCounter++;
+                if (_gcCounter >= 10)
+                {
+                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
+                    _gcCounter = 0;
+                }
             }
         }
         catch
@@ -277,13 +279,19 @@ public class VideoFileCamera : ICamera, IDisposable
     {
         if (IsRunning)
         {
-            while (IsRunning && _frame == null && !token.IsCancellationRequested)
+            Mat? frame = null;
+            ImageCapturedEvent += Camera_ImageCapturedEvent;
+            void Camera_ImageCapturedEvent(ICamera camera, Mat image)
+            {
+                frame = image?.Clone();
+            }
+
+            while (IsRunning && frame == null && !token.IsCancellationRequested)
                 await Task.Delay(10, token);
 
-            lock (_getPictureThreadLock)
-            {
-                return _frame?.Clone();
-            }
+            ImageCapturedEvent -= Camera_ImageCapturedEvent;
+
+            return frame;
         }
 
         if (_videoFile == null)
@@ -291,13 +299,9 @@ public class VideoFileCamera : ICamera, IDisposable
 
         var image = new Mat();
         if (_videoFile?.Grab() ?? false)
-        {
             _videoFile?.Retrieve(image);
-        }
         else if (RepeatFile)
-        {
             SetNextFile(true);
-        }
 
         return image;
     }
@@ -308,14 +312,9 @@ public class VideoFileCamera : ICamera, IDisposable
         {
             var image = await GrabFrame(token);
             if (image == null)
-            {
-                await Task.Delay(100, token);
-            }
+                await Task.Delay(10, token);
             else
-            {
-                yield return image.Clone();
-                image.Dispose();
-            }
+                yield return image;
         }
     }
 
@@ -371,7 +370,6 @@ public class VideoFileCamera : ICamera, IDisposable
                 _keepAliveTimer.Dispose();
                 _cancellationTokenSourceCameraGrabber?.Dispose();
                 _cancellationTokenSource?.Dispose();
-                _frame?.Dispose();
                 _videoFile?.Dispose();
             }
 

@@ -12,9 +12,10 @@ using System.Timers;
 using OpenCvSharp;
 
 using QuickNV.Onvif;
+using QuickNV.Onvif.Analytics;
 using QuickNV.Onvif.Discovery;
 using QuickNV.Onvif.Media;
-
+using DateTime = System.DateTime;
 using IPAddress = System.Net.IPAddress;
 
 namespace CameraLib.IP
@@ -41,7 +42,6 @@ namespace CameraLib.IP
         private readonly object _getPictureThreadLock = new object();
         private VideoCapture? _captureDevice;
         private Task? _captureTask;
-        private Mat? _frame;
         private readonly Stopwatch _fpsTimer = new();
         private byte _frameCount;
 
@@ -50,6 +50,7 @@ namespace CameraLib.IP
         private int _height = 0;
         private string _format = string.Empty;
         private CancellationToken _token = CancellationToken.None;
+        private int _gcCounter = 0;
 
         private bool _disposedValue;
 
@@ -224,14 +225,14 @@ namespace CameraLib.IP
             _keepAliveTimer.Start();
 
             _captureTask?.Dispose();
-            _captureTask = Task.Run(() =>
+            _captureTask = Task.Run(async () =>
             {
                 while (!_cancellationTokenSourceCameraGrabber.Token.IsCancellationRequested)
                 {
                     if (_captureDevice.Grab())
-                        ImageCaptured();
+                        CaptureImage();
                     else
-                        Task.Delay(10, _cancellationTokenSourceCameraGrabber.Token);
+                        await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
                 }
             }, _cancellationTokenSourceCameraGrabber.Token);
 
@@ -240,7 +241,7 @@ namespace CameraLib.IP
             return true;
         }
 
-        private void ImageCaptured()
+        private void CaptureImage()
         {
             if (Monitor.IsEntered(_getPictureThreadLock))
                 return;
@@ -249,17 +250,13 @@ namespace CameraLib.IP
             {
                 lock (_getPictureThreadLock)
                 {
-                    _frame?.Dispose();
-                    _frame = new Mat();
-                    if (!(_captureDevice?.Retrieve(_frame) ?? false))
+                    var frame = new Mat();
+                    if (!(_captureDevice?.Retrieve(frame) ?? false) || frame == null)
                         return;
 
-                    if (CurrentFrameFormat == null)
-                    {
-                        CurrentFrameFormat = new FrameFormat(_frame.Width, _frame.Height);
-                    }
+                    CurrentFrameFormat ??= new FrameFormat(frame.Width, frame.Height);
 
-                    ImageCapturedEvent?.Invoke(this, _frame.Clone());
+                    ImageCapturedEvent?.Invoke(this, frame);
                     if (!_fpsTimer.IsRunning)
                     {
                         _fpsTimer.Start();
@@ -277,7 +274,13 @@ namespace CameraLib.IP
                             _frameCount = 0;
                         }
                     }
-                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
+
+                    _gcCounter++;
+                    if (_gcCounter >= 10)
+                    {
+                        GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
+                        _gcCounter = 0;
+                    }
                 }
             }
             catch
@@ -320,13 +323,17 @@ namespace CameraLib.IP
         {
             if (IsRunning)
             {
-                while (IsRunning && _frame == null && !token.IsCancellationRequested)
+                Mat? frame = null;
+                ImageCapturedEvent += Camera_ImageCapturedEvent;
+                void Camera_ImageCapturedEvent(ICamera camera, Mat image)
+                {
+                    frame = image?.Clone();
+                }
+
+                while (IsRunning && frame == null && !token.IsCancellationRequested)
                     await Task.Delay(10, token);
 
-                lock (_getPictureThreadLock)
-                {
-                    return _frame?.Clone();
-                }
+                return frame;
             }
 
             var image = new Mat();
@@ -364,14 +371,9 @@ namespace CameraLib.IP
             {
                 var image = await GrabFrame(token);
                 if (image == null)
-                {
-                    await Task.Delay(100, token);
-                }
+                    await Task.Delay(10, token);
                 else
-                {
-                    yield return image.Clone();
-                    image.Dispose();
-                }
+                    yield return image;
             }
         }
 
@@ -432,7 +434,6 @@ namespace CameraLib.IP
                     _keepAliveTimer.Dispose();
                     _captureDevice?.Dispose();
                     _cancellationTokenSource?.Dispose();
-                    _frame?.Dispose();
                 }
 
                 _disposedValue = true;
