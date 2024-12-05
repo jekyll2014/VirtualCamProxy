@@ -151,7 +151,7 @@ namespace CameraLib.MJPEG
             _stopCapture = false;
             try
             {
-                await StartAsync(Description.Path, AuthenicationType, Login, Password, token);
+                await StartAsync(Description.Path, AuthenicationType, Login, Password, token).WaitAsync(TimeSpan.FromMilliseconds(FrameTimeout), token);
             }
             catch (Exception ex)
             {
@@ -256,7 +256,7 @@ namespace CameraLib.MJPEG
         /// <returns></returns>
         private async Task StartAsync(string url, AuthType authenicationType, string login = "", string password = "", CancellationToken? token = null, int chunkMaxSize = 1024, int frameBufferSize = 1024 * 1024)
         {
-            var tok = token ?? CancellationToken.None;
+            var tokenLocal = token ?? CancellationToken.None;
 
             using (var httpClient = new HttpClient())
             {
@@ -265,9 +265,8 @@ namespace CameraLib.MJPEG
                         "Basic",
                         Convert.ToBase64String(Encoding.ASCII.GetBytes($"{login}:{password}")));
 
-                await using (var stream = await httpClient.GetStreamAsync(url, tok).ConfigureAwait(false))
+                await using (var stream = await httpClient.GetStreamAsync(url, tokenLocal).ConfigureAwait(false))
                 {
-
                     var streamBuffer = new byte[chunkMaxSize];      // Stream chunk read
                     var frameBuffer = new byte[frameBufferSize];    // Frame buffer
 
@@ -280,12 +279,12 @@ namespace CameraLib.MJPEG
                     IsRunning = true;
                     try
                     {
-                        while (!_stopCapture && !tok.IsCancellationRequested)
+                        while (!_stopCapture && !tokenLocal.IsCancellationRequested)
                         {
-                            var streamLength = await stream.ReadAsync(streamBuffer.AsMemory(0, chunkMaxSize), tok)
+                            var streamLength = await stream.ReadAsync(streamBuffer.AsMemory(0, chunkMaxSize), tokenLocal)
                                 .ConfigureAwait(false);
                             ParseStreamBuffer(frameBuffer, ref frameIdx, streamLength, streamBuffer, ref inPicture,
-                                ref previous, ref current, tok);
+                                ref previous, ref current, tokenLocal);
                         }
                     }
                     catch (Exception ex)
