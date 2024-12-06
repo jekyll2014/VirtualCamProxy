@@ -1,4 +1,10 @@
-﻿using System;
+﻿using OpenCvSharp;
+
+using QuickNV.Onvif;
+using QuickNV.Onvif.Discovery;
+using QuickNV.Onvif.Media;
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -9,18 +15,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 
-using OpenCvSharp;
-
-using QuickNV.Onvif;
-using QuickNV.Onvif.Analytics;
-using QuickNV.Onvif.Discovery;
-using QuickNV.Onvif.Media;
 using DateTime = System.DateTime;
 using IPAddress = System.Net.IPAddress;
 
 namespace CameraLib.IP
 {
-    public class IpCamera : ICamera, IDisposable
+    public class IpCamera : ICamera
     {
         public AuthType AuthenicationType { get; private set; }
         public string Login { get; private set; }
@@ -30,7 +30,7 @@ namespace CameraLib.IP
         public bool IsRunning { get; private set; } = false;
         public FrameFormat? CurrentFrameFormat { get; private set; }
         public double CurrentFps { get; private set; }
-        public int FrameTimeout { get; set; } = 30000;
+        public int FrameTimeout { get; set; } = 10000;
 
         public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
 
@@ -324,16 +324,17 @@ namespace CameraLib.IP
             if (IsRunning)
             {
                 Mat? frame = null;
-                ImageCapturedEvent += Camera_ImageCapturedEvent;
-                void Camera_ImageCapturedEvent(ICamera camera, Mat image)
-                {
-                    frame = image?.Clone();
-                }
+                ImageCapturedEvent += CameraImageCapturedEvent;
 
                 while (IsRunning && frame == null && !token.IsCancellationRequested)
                     await Task.Delay(10, token);
 
                 return frame;
+
+                void CameraImageCapturedEvent(ICamera camera, Mat image)
+                {
+                    frame = image?.Clone();
+                }
             }
 
             var image = new Mat();

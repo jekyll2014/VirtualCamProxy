@@ -59,7 +59,7 @@ public partial class Form1 : Form
             Button_softCamStop_Click(this, EventArgs.Empty);
         }
 
-        _cameraHub.ImageQueue.Clear();
+        _cameraHub.Dispose();
         _configuration.Save();
         if (_cameraFeed?.IsCompleted ?? false)
             _cameraFeed?.Dispose();
@@ -114,7 +114,6 @@ public partial class Form1 : Form
         comboBox_cameras.Enabled = false;
         comboBox_camResolution.Enabled = false;
         textBox_currentSource.Clear();
-
         _currentSource = _cameraHub.GetCamera(comboBox_cameras.SelectedIndex);
         if (_currentSource == null)
         {
@@ -131,7 +130,6 @@ public partial class Form1 : Form
         var frameFormat = _currentSource.Description.FrameFormats.ToArray()[comboBox_camResolution.SelectedIndex];
         var w = frameFormat?.Width ?? 0;
         var h = frameFormat?.Height ?? 0;
-
         var currentCam = _cameraHub.GetCamera(comboBox_cameras.SelectedIndex);
         if (currentCam is ScreenCamera scam)
         {
@@ -152,7 +150,6 @@ public partial class Form1 : Form
         if (_cancellationToken == CancellationToken.None)
         {
             _currentSource.Stop();
-
             button_camStart.Enabled = false;
             button_camStop.Enabled = true;
             button_camGetImage.Enabled = true;
@@ -163,10 +160,8 @@ public partial class Form1 : Form
             return;
         }
 
-
-        textBox_currentSource.Text = _currentSource.Description.Name;
+        textBox_currentSource.Text = _currentSource.Description.Path;
         _cameraFeed = Task.Run(CameraFeed, (CancellationToken)_cancellationToken);
-
         button_camStart.Enabled = false;
         button_camStop.Enabled = true;
         button_camGetImage.Enabled = true;

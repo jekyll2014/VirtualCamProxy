@@ -10,12 +10,14 @@ using System.Collections.Concurrent;
 using CameraExtension;
 
 namespace VirtualCamProxy;
-public class CameraHubService
+public class CameraHubService : IDisposable
 {
     private readonly CameraSettings _cameraSettings;
     private readonly int _maxBuffer;
     public readonly List<ICamera> Cameras = new List<ICamera>();
     public readonly ConcurrentQueue<Mat> ImageQueue = new ConcurrentQueue<Mat>();
+    private bool disposedValue;
+
     public ICamera? CurrentCamera { get; private set; }
 
     public CameraHubService(CameraSettings settings)
@@ -217,7 +219,6 @@ public class CameraHubService
     public ICamera? GetCamera(int cameraNumber)
     {
         if (cameraNumber < 0 || cameraNumber >= Cameras.Count())
-            //throw new ArgumentOutOfRangeException($"No cameraStream available: \"{cameraNumber}\"");\
             return null;
 
         var camera = Cameras.ToArray()[cameraNumber];
@@ -229,7 +230,6 @@ public class CameraHubService
     {
         var camera = Cameras.FirstOrDefault(n => n.Description.Path == cameraId);
         if (camera == null)
-            //throw new ArgumentOutOfRangeException($"No cameraStream available: \"{cameraId}\"");
             return null;
 
         return camera;
@@ -244,5 +244,33 @@ public class CameraHubService
         }
 
         ImageQueue.Enqueue(image);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposedValue)
+        {
+            if (disposing)
+            {
+                // TODO: dispose managed state (managed objects)
+                UnHookCamera();
+                foreach (var cam in Cameras)
+                    cam.Dispose();
+            }
+
+            // TODO: free unmanaged resources (unmanaged objects) and override finalizer
+            // TODO: set large fields to null
+            while (ImageQueue.TryDequeue(out var frame))
+                frame?.Dispose();
+
+            disposedValue = true;
+        }
+    }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 }

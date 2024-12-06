@@ -10,13 +10,13 @@ using Timer = System.Timers.Timer;
 
 namespace CameraExtension;
 
-public class VideoFileCamera : ICamera, IDisposable
+public class VideoFileCamera : ICamera
 {
     public CameraDescription Description { get; set; }
     public bool IsRunning { get; private set; }
     public FrameFormat? CurrentFrameFormat { get; private set; }
     public double CurrentFps { get; private set; }
-    public int FrameTimeout { get; set; } = 30000;
+    public int FrameTimeout { get; set; } = 10000;
 
     public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
 
@@ -24,6 +24,7 @@ public class VideoFileCamera : ICamera, IDisposable
 
     public bool RepeatFile = true;
 
+    private const string CameraName = "Video file(s)";
     private CancellationTokenSource? _cancellationTokenSource;
     private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
 
@@ -45,10 +46,13 @@ public class VideoFileCamera : ICamera, IDisposable
 
     public VideoFileCamera(string path, string name = "")
     {
+        if (string.IsNullOrEmpty(name))
+            name = CameraName;
+
         Description = new CameraDescription(CameraType.VideoFile,
             path,
-            "Video file(s)",
-            GetAllAvailableResolution(path));
+            name,
+            GetFileResolution(path));
         CurrentFps = 0;
 
         _keepAliveTimer.Elapsed += CameraDisconnected;
@@ -67,22 +71,16 @@ public class VideoFileCamera : ICamera, IDisposable
         _fileNames.Clear();
         _fileNames.AddRange(paths);
         _fileIndex = 0;
-
-        if (_fileNames.Any())
+        if (_fileNames.Count != 0)
         {
             var file = _fileNames.FirstOrDefault() ?? "";
-
             if (string.IsNullOrEmpty(file) || !File.Exists(file))
                 return;
 
-            var name = new FileInfo(file).Name;
             _videoFile = new VideoCapture(file);
             _videoFile.ConvertRgb = true;
-            Description = new CameraDescription(CameraType.VideoFile,
-                file,
-                name,
-                GetAllAvailableResolution(file));
-
+            Description.Path = file;
+            Description.FrameFormats = GetFileResolution(_videoFile);
             CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
             CurrentFps = CurrentFrameFormat?.Fps ?? 0;
             _format = CurrentFrameFormat?.Format ?? string.Empty;
@@ -95,7 +93,7 @@ public class VideoFileCamera : ICamera, IDisposable
         if (_videoFile != null)
             _videoFile.Dispose();
 
-        if (!_fileNames.Any())
+        if (_fileNames.Count == 0)
             return false;
 
         if (_fileIndex < _fileNames.Count - 1)
@@ -106,18 +104,13 @@ public class VideoFileCamera : ICamera, IDisposable
             return false;
 
         var file = _fileNames[_fileIndex];
-
         if (string.IsNullOrEmpty(file) || !File.Exists(file))
             return false;
 
-        var name = new FileInfo(file).Name;
         _videoFile = new VideoCapture(file);
         _videoFile.ConvertRgb = true;
-        Description = new CameraDescription(CameraType.VideoFile,
-            file,
-            name,
-            GetAllAvailableResolution(file));
-
+        Description.Path = file;
+        Description.FrameFormats = GetFileResolution(_videoFile);
         CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
         CurrentFps = CurrentFrameFormat?.Fps ?? 0;
         _format = CurrentFrameFormat?.Format ?? string.Empty;
@@ -148,11 +141,27 @@ public class VideoFileCamera : ICamera, IDisposable
         return result;
     }
 
-    private List<FrameFormat> GetAllAvailableResolution(string path)
+    private List<FrameFormat> GetFileResolution(string path)
+    {
+
+        VideoCapture? videoFile = null;
+        if (!string.IsNullOrEmpty(path))
+        {
+            try
+            {
+                new VideoCapture(path);
+            }
+            catch { }
+        }
+
+        return GetFileResolution(videoFile);
+    }
+
+    private List<FrameFormat> GetFileResolution(VideoCapture? videoFile)
     {
         return new List<FrameFormat>()
                 {
-                    new FrameFormat(_videoFile?.FrameWidth??0, _videoFile?.FrameHeight??0, $"{_videoFile?.FourCC}", _videoFile?.Fps??0)
+                    new FrameFormat(videoFile?.FrameWidth??0, videoFile?.FrameHeight??0, $"{videoFile?.FourCC}", videoFile?.Fps??0)
                 };
     }
 
@@ -280,18 +289,19 @@ public class VideoFileCamera : ICamera, IDisposable
         if (IsRunning)
         {
             Mat? frame = null;
-            ImageCapturedEvent += Camera_ImageCapturedEvent;
-            void Camera_ImageCapturedEvent(ICamera camera, Mat image)
-            {
-                frame = image?.Clone();
-            }
+            ImageCapturedEvent += CameraImageCapturedEvent;
 
             while (IsRunning && frame == null && !token.IsCancellationRequested)
                 await Task.Delay(10, token);
 
-            ImageCapturedEvent -= Camera_ImageCapturedEvent;
+            ImageCapturedEvent -= CameraImageCapturedEvent;
 
             return frame;
+
+            void CameraImageCapturedEvent(ICamera camera, Mat image)
+            {
+                frame = image?.Clone();
+            }
         }
 
         if (_videoFile == null)

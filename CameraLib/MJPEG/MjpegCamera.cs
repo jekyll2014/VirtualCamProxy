@@ -17,7 +17,7 @@ using IPAddress = System.Net.IPAddress;
 
 namespace CameraLib.MJPEG
 {
-    public class MjpegCamera : ICamera, IDisposable
+    public class MjpegCamera : ICamera
     {
         // JPEG delimiters
         const byte picMarker = 0xFF;
@@ -32,7 +32,7 @@ namespace CameraLib.MJPEG
         public bool IsRunning { get; set; }
         public FrameFormat? CurrentFrameFormat { get; private set; }
         public double CurrentFps { get; private set; }
-        public int FrameTimeout { get; set; } = 30000;
+        public int FrameTimeout { get; set; } = 10000;
 
         public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
 
@@ -78,7 +78,7 @@ namespace CameraLib.MJPEG
 
             if (forceCameraConnect)
             {
-                if (PingAddress(cameraUri.Host, discoveryTimeout - 1000).Result)
+                if (PingAddress(cameraUri.Host, discoveryTimeout).Result)
                 {
                     try
                     {
@@ -89,10 +89,7 @@ namespace CameraLib.MJPEG
                             image.Dispose();
                         }
                     }
-                    catch (Exception ex)
-                    {
-
-                    }
+                    catch { }
                 }
             }
 
@@ -151,7 +148,8 @@ namespace CameraLib.MJPEG
             _stopCapture = false;
             try
             {
-                await StartAsync(Description.Path, AuthenicationType, Login, Password, token).WaitAsync(TimeSpan.FromMilliseconds(FrameTimeout), token);
+                _imageGrabber?.Dispose();
+                _imageGrabber = StartAsync(Description.Path, AuthenicationType, Login, Password, token).WaitAsync(TimeSpan.FromMilliseconds(FrameTimeout), token);
             }
             catch (Exception ex)
             {
@@ -184,8 +182,7 @@ namespace CameraLib.MJPEG
 
                 _stopCapture = true;
                 var timeOut = DateTime.Now.AddSeconds(100);
-                while (IsRunning && DateTime.Now < timeOut)
-                    Task.Delay(10);
+                _imageGrabber?.Wait(5000);
 
                 CurrentFrameFormat = null;
                 _fpsTimer.Reset();
@@ -197,18 +194,19 @@ namespace CameraLib.MJPEG
             if (IsRunning)
             {
                 Mat? frame = null;
-                ImageCapturedEvent += Camera_ImageCapturedEvent;
-                void Camera_ImageCapturedEvent(ICamera camera, Mat image)
-                {
-                    frame = image?.Clone();
-                }
+                ImageCapturedEvent += CameraImageCapturedEvent;
 
                 while (IsRunning && frame == null && !token.IsCancellationRequested)
                     await Task.Delay(10, token);
 
-                ImageCapturedEvent -= Camera_ImageCapturedEvent;
+                ImageCapturedEvent -= CameraImageCapturedEvent;
 
                 return frame;
+
+                void CameraImageCapturedEvent(ICamera camera, Mat image)
+                {
+                    frame = image?.Clone();
+                }
             }
 
             var image = new Mat();
@@ -448,6 +446,8 @@ namespace CameraLib.MJPEG
                 if (disposing)
                 {
                     Stop();
+                    _imageGrabber?.Wait(5000);
+                    _imageGrabber?.Dispose();
                     _keepAliveTimer.Close();
                     _keepAliveTimer.Dispose();
                     _cancellationTokenSource?.Dispose();

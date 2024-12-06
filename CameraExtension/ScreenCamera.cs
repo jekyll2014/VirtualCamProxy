@@ -10,13 +10,13 @@ using Size = System.Drawing.Size;
 
 namespace CameraExtension;
 
-public class ScreenCamera : ICamera, IDisposable
+public class ScreenCamera : ICamera
 {
     public CameraDescription Description { get; set; }
     public bool IsRunning { get; private set; }
     public FrameFormat? CurrentFrameFormat { get; private set; }
     public double CurrentFps { get; private set; }
-    public int FrameTimeout { get; set; } = 30000;
+    public int FrameTimeout { get; set; } = 10000;
 
     public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
 
@@ -274,18 +274,19 @@ public class ScreenCamera : ICamera, IDisposable
         if (IsRunning)
         {
             Mat? frame = null;
-            ImageCapturedEvent += Camera_ImageCapturedEvent;
-            void Camera_ImageCapturedEvent(ICamera camera, Mat image)
-            {
-                frame = image?.Clone();
-            }
+            ImageCapturedEvent += CameraImageCapturedEvent;
 
             while (IsRunning && frame == null && !token.IsCancellationRequested)
                 await Task.Delay(10, token);
 
-            ImageCapturedEvent -= Camera_ImageCapturedEvent;
+            ImageCapturedEvent -= CameraImageCapturedEvent;
 
             return frame;
+
+            void CameraImageCapturedEvent(ICamera camera, Mat image)
+            {
+                frame = image?.Clone();
+            }
         }
 
         var size = new Size(Screen.Bounds.Width, Screen.Bounds.Height);

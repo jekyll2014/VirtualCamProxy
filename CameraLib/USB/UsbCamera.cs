@@ -13,13 +13,13 @@ using OpenCvSharp;
 
 namespace CameraLib.USB
 {
-    public class UsbCamera : ICamera, IDisposable
+    public class UsbCamera : ICamera
     {
         public CameraDescription Description { get; set; }
         public bool IsRunning { get; private set; }
         public FrameFormat? CurrentFrameFormat { get; private set; }
         public double CurrentFps { get; private set; }
-        public int FrameTimeout { get; set; } = 30000;
+        public int FrameTimeout { get; set; } = 10000;
 
         public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
 
@@ -310,16 +310,17 @@ namespace CameraLib.USB
             if (IsRunning)
             {
                 Mat? frame = null;
-                ImageCapturedEvent += Camera_ImageCapturedEvent;
-                void Camera_ImageCapturedEvent(ICamera camera, Mat image)
-                {
-                    frame = image?.Clone();
-                }
+                ImageCapturedEvent += CameraImageCapturedEvent;
 
                 while (IsRunning && frame == null && !token.IsCancellationRequested)
                     await Task.Delay(10, token);
 
                 return frame;
+
+                void CameraImageCapturedEvent(ICamera camera, Mat image)
+                {
+                    frame = image?.Clone();
+                }
             }
 
             var image = new Mat();
