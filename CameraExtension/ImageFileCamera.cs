@@ -265,7 +265,6 @@ public class ImageFileCamera : ICamera
         {
             Mat? frame = null;
             ImageCapturedEvent += CameraImageCapturedEvent;
-
             while (IsRunning && frame == null && !token.IsCancellationRequested)
                 await Task.Delay(10, token);
 

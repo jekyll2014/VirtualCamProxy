@@ -195,7 +195,6 @@ namespace CameraLib.MJPEG
             {
                 Mat? frame = null;
                 ImageCapturedEvent += CameraImageCapturedEvent;
-
                 while (IsRunning && frame == null && !token.IsCancellationRequested)
                     await Task.Delay(10, token);
 
@@ -209,13 +208,12 @@ namespace CameraLib.MJPEG
                 }
             }
 
-            var image = new Mat();
+            Mat? image = null;
             await Task.Run(async () =>
             {
                 if (await Start(0, 0, string.Empty, token))
                 {
                     image = await GrabFrame(token);
-
                     if (image != null)
                         CurrentFrameFormat ??= new FrameFormat(image.Width, image.Height);
                 }

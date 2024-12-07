@@ -325,9 +325,10 @@ namespace CameraLib.IP
             {
                 Mat? frame = null;
                 ImageCapturedEvent += CameraImageCapturedEvent;
-
                 while (IsRunning && frame == null && !token.IsCancellationRequested)
                     await Task.Delay(10, token);
+
+                ImageCapturedEvent -= CameraImageCapturedEvent;
 
                 return frame;
 
@@ -337,7 +338,7 @@ namespace CameraLib.IP
                 }
             }
 
-            var image = new Mat();
+            Mat? image = null;
             await Task.Run(async () =>
             {
                 _captureDevice = await GetCaptureDevice(token);
@@ -348,10 +349,9 @@ namespace CameraLib.IP
                 {
                     if (_captureDevice.Grab())
                     {
+                        image = new Mat();
                         if (_captureDevice.Retrieve(image))
-                        {
                             CurrentFrameFormat ??= new FrameFormat(image.Width, image.Height);
-                        }
                     }
                 }
                 catch (Exception ex)

@@ -266,18 +266,17 @@ namespace CameraLib.FlashCap
             if (IsRunning)
             {
                 Mat? frame = null;
-                ImageCapturedEvent += Camera_ImageCapturedEvent;
-                void Camera_ImageCapturedEvent(ICamera camera, Mat image)
-                {
-                    frame = image?.Clone();
-                }
-
+                ImageCapturedEvent += CameraImageCapturedEvent;
                 while (IsRunning && frame == null && !token.IsCancellationRequested)
                     await Task.Delay(10, token);
 
-                lock (_getPictureThreadLock)
+                ImageCapturedEvent -= CameraImageCapturedEvent;
+
+                return frame;
+
+                void CameraImageCapturedEvent(ICamera camera, Mat image)
                 {
-                    return frame?.Clone();
+                    frame = image?.Clone();
                 }
             }
 
@@ -287,14 +286,11 @@ namespace CameraLib.FlashCap
                 try
                 {
                     var cameraCharacteristics = GetCaptureDevice(0, 0, string.Empty);
-
                     if (cameraCharacteristics == null)
                         return;
 
                     var imageData = await _usbCamera.TakeOneShotAsync(cameraCharacteristics, token);
-
                     image = Cv2.ImDecode(imageData, ImreadModes.Color);
-
                     CurrentFrameFormat ??= new FrameFormat(image?.Width ?? 0, image?.Height ?? 0);
                 }
                 catch (Exception ex)

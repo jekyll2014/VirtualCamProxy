@@ -290,7 +290,6 @@ public class VideoFileCamera : ICamera
         {
             Mat? frame = null;
             ImageCapturedEvent += CameraImageCapturedEvent;
-
             while (IsRunning && frame == null && !token.IsCancellationRequested)
                 await Task.Delay(10, token);
 
@@ -307,11 +306,21 @@ public class VideoFileCamera : ICamera
         if (_videoFile == null)
             SetFile(_fileNames);
 
-        var image = new Mat();
+        Mat? image = null;
         if (_videoFile?.Grab() ?? false)
+        {
+            image = new Mat();
             _videoFile?.Retrieve(image);
+        }
         else if (RepeatFile)
+        {
             SetNextFile(true);
+            if (_videoFile?.Grab() ?? false)
+            {
+                image = new Mat();
+                _videoFile?.Retrieve(image);
+            }
+        }
 
         return image;
     }
