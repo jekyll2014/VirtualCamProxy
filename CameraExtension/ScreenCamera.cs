@@ -17,16 +17,11 @@ public class ScreenCamera : ICamera
     public FrameFormat? CurrentFrameFormat { get; private set; }
     public double CurrentFps { get; private set; }
     public int FrameTimeout { get; set; } = 10000;
-
     public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
-
     public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
-
     public bool ShowCursor = true;
-
     // ToDo: Not implemented yet
     public bool ShowClicks = true;
-
     public double Fps
     {
         get => _fps;
@@ -40,7 +35,6 @@ public class ScreenCamera : ICamera
     private const string NamePrefix = "Desktop#";
     private CancellationTokenSource? _cancellationTokenSource;
     private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
-
     private readonly Screen Screen;
     private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
@@ -48,13 +42,11 @@ public class ScreenCamera : ICamera
     private byte _frameCount;
     private double _fps = 15;
     private int _delay = 100;
-
     private readonly Timer _keepAliveTimer = new();
     private int _width = 0;
     private int _height = 0;
     private CancellationToken _token = CancellationToken.None;
     private int _gcCounter = 0;
-
     private bool _disposedValue;
 
     public ScreenCamera(string path, string name = "", double fps = 15)

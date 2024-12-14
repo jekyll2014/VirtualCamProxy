@@ -27,18 +27,15 @@ namespace CameraLib.MJPEG
         public AuthType AuthenicationType { get; }
         public string Login { get; }
         public string Password { get; }
-
         public CameraDescription Description { get; set; }
         public bool IsRunning { get; set; }
         public FrameFormat? CurrentFrameFormat { get; private set; }
         public double CurrentFps { get; private set; }
         public int FrameTimeout { get; set; } = 10000;
-
         public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
-
         public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
-        private CancellationTokenSource? _cancellationTokenSource;
 
+        private CancellationTokenSource? _cancellationTokenSource;
         private readonly object _getPictureThreadLock = new object();
         private Task? _imageGrabber;
         private volatile bool _stopCapture = false;

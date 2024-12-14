@@ -17,22 +17,17 @@ public class VideoFileCamera : ICamera
     public FrameFormat? CurrentFrameFormat { get; private set; }
     public double CurrentFps { get; private set; }
     public int FrameTimeout { get; set; } = 10000;
-
     public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
-
     public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
-
     public bool RepeatFile = true;
 
     private const string CameraName = "Video file(s)";
     private CancellationTokenSource? _cancellationTokenSource;
     private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
-
     private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
     private readonly Stopwatch _fpsTimer = new();
     private byte _frameCount;
-
     private readonly List<string> _fileNames = [];
     private int _fileIndex = 0;
     private VideoCapture? _videoFile;
@@ -41,7 +36,6 @@ public class VideoFileCamera : ICamera
     private string _format = string.Empty;
     private CancellationToken _token = CancellationToken.None;
     private int _gcCounter = 0;
-
     private bool _disposedValue;
 
     public VideoFileCamera(string path, string name = "")

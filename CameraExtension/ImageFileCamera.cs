@@ -16,26 +16,21 @@ public class ImageFileCamera : ICamera
     public int FrameTimeout { get; set; } = 10000;
 
     public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
-
     public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
-
     public bool RepeatFile = true;
 
     private CancellationTokenSource? _cancellationTokenSource;
     private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
-
     private const string CameraName = "Image file(s)";
     private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
     private readonly Stopwatch _fpsTimer = new();
     private byte _frameCount;
-
     private readonly List<string> _fileNames = [];
     private int _fileIndex = 0;
     private string _imageFile = string.Empty;
     public int Delay = 1000;
     private int _gcCounter = 0;
-
     private bool _disposedValue;
 
     public ImageFileCamera(string path, string name = "")

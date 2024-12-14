@@ -82,7 +82,7 @@ namespace CameraLib.FlashCap
             foreach (var camera in descriptors)
             {
                 var formats = GetAllAvailableResolution(camera);
-                result.Add(new CameraDescription(CameraType.USB, camera.Identity.ToString() ?? string.Empty, camera.Name, formats));
+                result.Add(new CameraDescription(CameraType.USB_FC, camera.Identity.ToString() ?? string.Empty, camera.Name, formats));
             }
 
             return result;

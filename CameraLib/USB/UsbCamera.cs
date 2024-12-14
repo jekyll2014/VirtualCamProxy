@@ -22,6 +22,7 @@ namespace CameraLib.USB
         public int FrameTimeout { get; set; } = 10000;
         public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
         public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
+
         private CancellationTokenSource? _cancellationTokenSource;
         private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
         private readonly DsDevice? _usbCamera;
