@@ -28,7 +28,7 @@ namespace CameraLib.MJPEG
         public string Login { get; }
         public string Password { get; }
         public CameraDescription Description { get; set; }
-        public bool IsRunning { get; set; }
+        public bool IsRunning { get; set; } = false;
         public FrameFormat? CurrentFrameFormat { get; private set; }
         public double CurrentFps { get; private set; }
         public int FrameTimeout { get; set; } = 10000;
@@ -36,12 +36,12 @@ namespace CameraLib.MJPEG
         public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
 
         private CancellationTokenSource? _cancellationTokenSource;
-        private readonly object _getPictureThreadLock = new object();
+        private readonly object _getPictureThreadLock = new();
         private Task? _imageGrabber;
         private volatile bool _stopCapture = false;
         private readonly Stopwatch _fpsTimer = new();
         private volatile byte _frameCount;
-        private readonly System.Timers.Timer _keepAliveTimer = new System.Timers.Timer();
+        private readonly System.Timers.Timer _keepAliveTimer = new();
         private int _width = 0;
         private int _height = 0;
         private string _format = string.Empty;
@@ -67,7 +67,7 @@ namespace CameraLib.MJPEG
                 ? cameraUri.Host
                 : name;
 
-            List<FrameFormat> frameFormats = new();
+            List<FrameFormat> frameFormats = [];
             Description = new CameraDescription(CameraType.IP, path, name, frameFormats);
 
             if (forceCameraConnect)
@@ -106,7 +106,7 @@ namespace CameraLib.MJPEG
         // can not be implemented
         public List<CameraDescription> DiscoverCamerasAsync(int discoveryTimeout, CancellationToken token)
         {
-            return new List<CameraDescription>();
+            return [];
         }
 
         private static async Task<bool> PingAddress(string host, int pingTimeout = 3000)
@@ -280,8 +280,9 @@ namespace CameraLib.MJPEG
                     catch (Exception ex)
                     {
                         Console.WriteLine(ex);
-                        IsRunning = false;
                     }
+
+                    IsRunning = false;
                 }
             }
         }
