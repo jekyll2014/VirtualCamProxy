@@ -16,7 +16,7 @@ namespace CameraLib.USB
     public class UsbCamera : ICamera
     {
         public CameraDescription Description { get; set; }
-        public bool IsRunning { get; private set; }
+        public bool IsRunning { get; private set; } = false;
         public FrameFormat? CurrentFrameFormat { get; private set; }
         public double CurrentFps { get; private set; }
         public int FrameTimeout { get; set; } = 10000;

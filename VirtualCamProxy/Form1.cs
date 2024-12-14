@@ -5,7 +5,9 @@ using CameraLib.IP;
 using CameraLib.MJPEG;
 
 using OpenCvSharp;
+
 using System.Security.Principal;
+
 using VirtualCamera;
 
 using VirtualCamProxy.Panels;
@@ -19,8 +21,8 @@ public partial class Form1 : Form
 {
     private const string ConfigFileName = "appsettings.json";
     private const string SoftCamName = "DirectShow Softcam";
-    private readonly JsonStorage<SoftCameraSettings> _configuration = new JsonStorage<SoftCameraSettings>(ConfigFileName, true);
-    private SoftCameraSettings _settings = new SoftCameraSettings();
+    private readonly JsonStorage<SoftCameraSettings> _configuration = new(ConfigFileName, true);
+    private readonly SoftCameraSettings _settings = new();
     private Task? _cameraFeed;
     private CancellationToken? _cancellationToken;
     private CameraHubService _cameraHub;
@@ -209,7 +211,7 @@ public partial class Form1 : Form
         comboBox_cameras.Enabled = false;
         comboBox_camResolution.Enabled = false;
         comboBox_cameras.Items.Clear();
-        await _cameraHub.RefreshCameraCollection(CancellationToken.None);
+        await _cameraHub.RefreshCameraCollection();
         _cameraHub.Cameras.RemoveAll(n => n.Description.Name == SoftCamName);
         var i = 1;
         foreach (var cam in _cameraHub.Cameras)
@@ -317,7 +319,7 @@ public partial class Form1 : Form
     {
         using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
         {
-            WindowsPrincipal principal = new WindowsPrincipal(identity);
+            WindowsPrincipal principal = new(identity);
             return principal.IsInRole(WindowsBuiltInRole.Administrator);
         }
     }

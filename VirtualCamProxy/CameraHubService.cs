@@ -14,8 +14,8 @@ public class CameraHubService : IDisposable
 {
     private readonly CameraSettings _cameraSettings;
     private readonly int _maxBuffer;
-    public readonly List<ICamera> Cameras = new List<ICamera>();
-    public readonly ConcurrentQueue<Mat> ImageQueue = new ConcurrentQueue<Mat>();
+    public readonly List<ICamera> Cameras = [];
+    public readonly ConcurrentQueue<Mat> ImageQueue = new();
     private bool disposedValue;
 
     public ICamera? CurrentCamera { get; private set; }
@@ -26,7 +26,7 @@ public class CameraHubService : IDisposable
         _maxBuffer = _cameraSettings.MaxFrameBuffer;
     }
 
-    public async Task RefreshCameraCollection(CancellationToken cancellationToken)
+    public async Task RefreshCameraCollection()
     {
         // remove predefined cameras from collection
         Cameras.Clear();
@@ -89,7 +89,7 @@ public class CameraHubService : IDisposable
             Cameras.Add(serverCamera);
         });
 
-        List<CameraDescription> ipCameras = new();
+        List<CameraDescription> ipCameras = [];
         if (_cameraSettings.AutoSearchIp)
         {
             Console.WriteLine("Detecting IP cameras...");
@@ -108,8 +108,11 @@ public class CameraHubService : IDisposable
                          .Where(c => Cameras
                              .All(n => n.Description.Path != c.Path)))
             {
-                var serverCamera = new UsbCamera(c.Path);
-                serverCamera.FrameTimeout = _cameraSettings.FrameTimeout;
+                var serverCamera = new UsbCamera(c.Path)
+                {
+                    FrameTimeout = _cameraSettings.FrameTimeout
+                };
+
                 Cameras.Add(serverCamera);
             }
         }
@@ -126,8 +129,11 @@ public class CameraHubService : IDisposable
                          .Where(c => Cameras
                              .All(n => n.Description.Path != c.Path)))
             {
-                var serverCamera = new UsbCameraFc(c.Path);
-                serverCamera.FrameTimeout = _cameraSettings.FrameTimeout;
+                var serverCamera = new UsbCameraFc(c.Path)
+                {
+                    FrameTimeout = _cameraSettings.FrameTimeout
+                };
+
                 Cameras.Add(serverCamera);
             }
         }
@@ -144,8 +150,11 @@ public class CameraHubService : IDisposable
                              .All(n => n.Description.Path != c.Path)))
             {
                 Console.WriteLine($"Adding IP-Camera: {c.Name} - [{c.Path}]");
-                var serverCamera = new IpCamera(c.Path);
-                serverCamera.FrameTimeout = _cameraSettings.FrameTimeout;
+                var serverCamera = new IpCamera(c.Path)
+                {
+                    FrameTimeout = _cameraSettings.FrameTimeout
+                };
+
                 Cameras.Add(serverCamera);
             }
         }
@@ -162,8 +171,11 @@ public class CameraHubService : IDisposable
                          .Where(c => Cameras
                              .All(n => n.Description.Path != c.Path)))
             {
-                var serverCamera = new ScreenCamera(c.Path);
-                serverCamera.FrameTimeout = _cameraSettings.FrameTimeout;
+                var serverCamera = new ScreenCamera(c.Path)
+                {
+                    FrameTimeout = _cameraSettings.FrameTimeout
+                };
+
                 Cameras.Add(serverCamera);
             }
         }
@@ -218,7 +230,7 @@ public class CameraHubService : IDisposable
 
     public ICamera? GetCamera(int cameraNumber)
     {
-        if (cameraNumber < 0 || cameraNumber >= Cameras.Count())
+        if (cameraNumber < 0 || cameraNumber >= Cameras.Count)
             return null;
 
         var camera = Cameras.ToArray()[cameraNumber];
