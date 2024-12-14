@@ -20,4 +20,9 @@ public class FrameFormatDto
 
         return result;
     }
+
+    public override int GetHashCode()
+    {
+        return $"{Width}{Height}{Format}{Fps}".GetHashCode();
+    }
 }

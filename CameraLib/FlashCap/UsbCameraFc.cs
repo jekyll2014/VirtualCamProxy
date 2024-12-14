@@ -19,26 +19,20 @@ namespace CameraLib.FlashCap
         public FrameFormat? CurrentFrameFormat { get; private set; }
         public double CurrentFps { get; private set; }
         public int FrameTimeout { get; set; } = 10000;
-
         public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
-
         public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
 
         private CancellationTokenSource? _cancellationTokenSource;
-
         private readonly CaptureDeviceDescriptor _usbCamera;
         private CaptureDevice? _captureDevice;
         private readonly object _getPictureThreadLock = new();
         private readonly Stopwatch _fpsTimer = new();
         private byte _frameCount;
-
         private readonly System.Timers.Timer _keepAliveTimer = new System.Timers.Timer();
         private int _width = 0;
         private int _height = 0;
         private string _format = string.Empty;
-        private CancellationToken _token = CancellationToken.None;
         private int _gcCounter = 0;
-
         private bool _disposedValue;
 
         public UsbCameraFc(string path, string name = "")
@@ -68,7 +62,7 @@ namespace CameraLib.FlashCap
             {
                 Console.WriteLine($"{DateTime.Now.ToShortDateString()} {DateTime.Now.ToLongTimeString()} Camera connection restarted ({_fpsTimer.ElapsedMilliseconds} timeout)");
                 Stop(false);
-                await Start(_width, _height, _format, _token);
+                await Start(_width, _height, _format, CancellationToken.None);
             }
         }
 
@@ -119,16 +113,11 @@ namespace CameraLib.FlashCap
 
             _captureDevice = await _usbCamera.OpenAsync(cameraCharacteristics, OnPixelBufferArrived, token);
             if (_captureDevice == null)
-            {
-                IsRunning = false;
-
                 return false;
-            }
 
             _width = width;
             _height = height;
             _format = format;
-            _token = token;
 
             _cancellationTokenSource = new CancellationTokenSource();
             _frameCount = 0;
@@ -216,9 +205,6 @@ namespace CameraLib.FlashCap
                 catch
                 {
                     Stop();
-                }
-                finally
-                {
                     _gcCounter++;
                     if (_gcCounter >= 10)
                     {

@@ -41,7 +41,7 @@ public class ScreenCamera : ICamera
     private CancellationTokenSource? _cancellationTokenSource;
     private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
 
-    private Screen Screen;
+    private readonly Screen Screen;
     private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
     private readonly Stopwatch _fpsTimer = new();
@@ -49,10 +49,9 @@ public class ScreenCamera : ICamera
     private double _fps = 15;
     private int _delay = 100;
 
-    private readonly Timer _keepAliveTimer = new Timer();
+    private readonly Timer _keepAliveTimer = new();
     private int _width = 0;
     private int _height = 0;
-    private string _format = string.Empty;
     private CancellationToken _token = CancellationToken.None;
     private int _gcCounter = 0;
 
@@ -67,7 +66,7 @@ public class ScreenCamera : ICamera
                      ?? throw new ArgumentException("Can not find camera", nameof(path));
 
         Fps = fps;
-        Description = new CameraDescription(CameraType.Screen, path, name, GetAllAvailableResolution(path));
+        Description = new CameraDescription(CameraType.Screen, path, name, GetAllAvailableResolution());
         CurrentFps = Description.FrameFormats.FirstOrDefault()?.Fps ?? 15;
 
         _keepAliveTimer.Elapsed += CameraDisconnected;
@@ -79,7 +78,7 @@ public class ScreenCamera : ICamera
         {
             Console.WriteLine($"{DateTime.Now.ToShortDateString()} {DateTime.Now.ToLongTimeString()} Camera connection restarted ({_fpsTimer.ElapsedMilliseconds} timeout)");
             Stop(false);
-            await Start(_width, _height, _format, _token);
+            await Start(_width, _height, string.Empty, _token);
         }
     }
 
@@ -94,11 +93,10 @@ public class ScreenCamera : ICamera
         var n = 0;
         foreach (var screen in System.Windows.Forms.Screen.AllScreens)
         {
-            result.Add(new CameraDescription(CameraType.Screen, $"{screen.DeviceName}", $"{NamePrefix}{(n).ToString()}",
-                new List<FrameFormat>()
-                {
+            result.Add(new CameraDescription(CameraType.Screen, $"{screen.DeviceName}", $"{NamePrefix}{n}",
+                [
                         new FrameFormat(screen.Bounds.Width, screen.Bounds.Height, $"{screen.BitsPerPixel}bpp", 15)
-                }));
+                ]));
 
             n++;
         }
@@ -106,12 +104,12 @@ public class ScreenCamera : ICamera
         return result;
     }
 
-    private List<FrameFormat> GetAllAvailableResolution(string path)
+    private List<FrameFormat> GetAllAvailableResolution()
     {
-        return new List<FrameFormat>()
-                {
+        return
+                [
                     new FrameFormat(Screen.Bounds.Width, Screen.Bounds.Height, $"{Screen.BitsPerPixel}bpp", _fps)
-                };
+                ];
     }
 
     public async Task<bool> Start(int width, int height, string format, CancellationToken token)

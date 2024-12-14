@@ -33,11 +33,11 @@ public class VideoFileCamera : ICamera
     private readonly Stopwatch _fpsTimer = new();
     private byte _frameCount;
 
-    private List<string> _fileNames = new List<string>();
+    private readonly List<string> _fileNames = [];
     private int _fileIndex = 0;
     private VideoCapture? _videoFile;
     private int _delay = 100;
-    private readonly Timer _keepAliveTimer = new Timer();
+    private readonly Timer _keepAliveTimer = new();
     private string _format = string.Empty;
     private CancellationToken _token = CancellationToken.None;
     private int _gcCounter = 0;
@@ -60,14 +60,12 @@ public class VideoFileCamera : ICamera
 
     public void SetFile(string path)
     {
-        SetFile(new List<string>() { path });
+        SetFile([path]);
     }
 
     public void SetFile(List<string> paths)
     {
-        if (_videoFile != null)
-            _videoFile.Dispose();
-
+        _videoFile?.Dispose();
         _fileNames.Clear();
         _fileNames.AddRange(paths);
         _fileIndex = 0;
@@ -77,8 +75,11 @@ public class VideoFileCamera : ICamera
             if (string.IsNullOrEmpty(file) || !File.Exists(file))
                 return;
 
-            _videoFile = new VideoCapture(file);
-            _videoFile.ConvertRgb = true;
+            _videoFile = new VideoCapture(file)
+            {
+                ConvertRgb = true
+            };
+
             Description.Path = file;
             Description.FrameFormats = GetFileResolution(_videoFile);
             CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
@@ -90,8 +91,7 @@ public class VideoFileCamera : ICamera
 
     private bool SetNextFile(bool repeat)
     {
-        if (_videoFile != null)
-            _videoFile.Dispose();
+        _videoFile?.Dispose();
 
         if (_fileNames.Count == 0)
             return false;
@@ -107,8 +107,11 @@ public class VideoFileCamera : ICamera
         if (string.IsNullOrEmpty(file) || !File.Exists(file))
             return false;
 
-        _videoFile = new VideoCapture(file);
-        _videoFile.ConvertRgb = true;
+        _videoFile = new VideoCapture(file)
+        {
+            ConvertRgb = true
+        };
+
         Description.Path = file;
         Description.FrameFormats = GetFileResolution(_videoFile);
         CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
@@ -141,7 +144,7 @@ public class VideoFileCamera : ICamera
         return result;
     }
 
-    private List<FrameFormat> GetFileResolution(string path)
+    private static List<FrameFormat> GetFileResolution(string path)
     {
 
         VideoCapture? videoFile = null;
@@ -149,7 +152,7 @@ public class VideoFileCamera : ICamera
         {
             try
             {
-                new VideoCapture(path);
+                videoFile = new VideoCapture(path);
             }
             catch { }
         }
@@ -157,12 +160,12 @@ public class VideoFileCamera : ICamera
         return GetFileResolution(videoFile);
     }
 
-    private List<FrameFormat> GetFileResolution(VideoCapture? videoFile)
+    private static List<FrameFormat> GetFileResolution(VideoCapture? videoFile)
     {
-        return new List<FrameFormat>()
-                {
+        return
+                [
                     new FrameFormat(videoFile?.FrameWidth??0, videoFile?.FrameHeight??0, $"{videoFile?.FourCC}", videoFile?.Fps??0)
-                };
+                ];
     }
 
     public async Task<bool> Start(int width, int height, string format, CancellationToken token)

@@ -30,12 +30,10 @@ public class ImageFileCamera : ICamera
     private readonly Stopwatch _fpsTimer = new();
     private byte _frameCount;
 
-    private List<string> _fileNames = new List<string>();
+    private readonly List<string> _fileNames = [];
     private int _fileIndex = 0;
     private string _imageFile = string.Empty;
     public int Delay = 1000;
-    private string _format = string.Empty;
-    private CancellationToken _token = CancellationToken.None;
     private int _gcCounter = 0;
 
     private bool _disposedValue;
@@ -47,14 +45,14 @@ public class ImageFileCamera : ICamera
 
         Description = new CameraDescription(CameraType.VideoFile,
             path,
-            "Image file(s)",
+            name,
             GetFileResolution(path));
         CurrentFps = 0;
     }
 
     public void SetFile(string path)
     {
-        SetFile(new List<string>() { path });
+        SetFile([path]);
     }
 
     public void SetFile(List<string> paths)
@@ -76,7 +74,6 @@ public class ImageFileCamera : ICamera
             Description.FrameFormats = GetFileResolution(_imageFile);
             CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
             CurrentFps = CurrentFrameFormat?.Fps ?? 0;
-            _format = CurrentFrameFormat?.Format ?? string.Empty;
         }
     }
 
@@ -103,7 +100,6 @@ public class ImageFileCamera : ICamera
         Description.FrameFormats = GetFileResolution(_imageFile);
         CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
         CurrentFps = CurrentFrameFormat?.Fps ?? 0;
-        _format = CurrentFrameFormat?.Format ?? string.Empty;
 
         return true;
     }
@@ -123,10 +119,10 @@ public class ImageFileCamera : ICamera
     private List<FrameFormat> GetFileResolution(string path)
     {
         if (string.IsNullOrEmpty(path) || !File.Exists(path))
-            return new List<FrameFormat>()
-            {
+            return
+            [
                 new FrameFormat(0, 0, "", 1000f / Delay)
-            };
+            ];
 
         Mat? img = null;
         try
@@ -135,18 +131,16 @@ public class ImageFileCamera : ICamera
         }
         catch { }
 
-        return new List<FrameFormat>()
-        {
+        return
+        [
             new FrameFormat(img?.Width??0, img?.Height??0, new FileInfo(path).Extension, 1000f / Delay)
-        };
+        ];
     }
 
     public async Task<bool> Start(int width, int height, string format, CancellationToken token)
     {
         if (IsRunning)
             return true;
-
-        _token = token;
 
         _cancellationTokenSource?.Dispose();
         _cancellationTokenSource = new CancellationTokenSource();

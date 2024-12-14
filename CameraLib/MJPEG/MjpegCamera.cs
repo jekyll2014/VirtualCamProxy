@@ -44,13 +44,10 @@ namespace CameraLib.MJPEG
         private volatile bool _stopCapture = false;
         private readonly Stopwatch _fpsTimer = new();
         private volatile byte _frameCount;
-
         private readonly System.Timers.Timer _keepAliveTimer = new System.Timers.Timer();
         private int _width = 0;
         private int _height = 0;
         private string _format = string.Empty;
-        private CancellationToken _token = CancellationToken.None;
-
         private bool _disposedValue;
 
         public MjpegCamera(string path,
@@ -105,7 +102,7 @@ namespace CameraLib.MJPEG
             {
                 Console.WriteLine($"{DateTime.Now.ToShortDateString()} {DateTime.Now.ToLongTimeString()} Camera connection restarted ({_fpsTimer.ElapsedMilliseconds} timeout)");
                 Stop(false);
-                await Start(_width, _height, _format, _token);
+                await Start(_width, _height, _format, CancellationToken.None);
             }
         }
 
@@ -137,7 +134,6 @@ namespace CameraLib.MJPEG
             _width = width;
             _height = height;
             _format = format;
-            _token = token;
 
             _cancellationTokenSource = new CancellationTokenSource();
             _frameCount = 0;
@@ -177,12 +173,12 @@ namespace CameraLib.MJPEG
             {
                 _keepAliveTimer.Stop();
 
-                if (cancellation)
-                    _cancellationTokenSource?.Cancel();
-
                 _stopCapture = true;
                 var timeOut = DateTime.Now.AddSeconds(100);
                 _imageGrabber?.Wait(5000);
+
+                if (cancellation)
+                    _cancellationTokenSource?.Cancel();
 
                 CurrentFrameFormat = null;
                 _fpsTimer.Reset();
@@ -279,6 +275,7 @@ namespace CameraLib.MJPEG
                         {
                             var streamLength = await stream.ReadAsync(streamBuffer.AsMemory(0, chunkMaxSize), tokenLocal)
                                 .ConfigureAwait(false);
+
                             ParseStreamBuffer(frameBuffer, ref frameIdx, streamLength, streamBuffer, ref inPicture,
                                 ref previous, ref current, tokenLocal);
                         }
@@ -286,9 +283,6 @@ namespace CameraLib.MJPEG
                     catch (Exception ex)
                     {
                         Console.WriteLine(ex);
-                    }
-                    finally
-                    {
                         IsRunning = false;
                     }
                 }
@@ -380,9 +374,6 @@ namespace CameraLib.MJPEG
                         catch
                         {
                             // We dont care about badly decoded pictures
-                        }
-                        finally
-                        {
                             GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
                         }
                     }
