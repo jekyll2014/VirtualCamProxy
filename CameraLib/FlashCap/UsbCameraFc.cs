@@ -111,7 +111,16 @@ namespace CameraLib.FlashCap
             if (cameraCharacteristics == null)
                 return false;
 
-            _captureDevice = await _usbCamera.OpenAsync(cameraCharacteristics, OnPixelBufferArrived, token);
+            try
+            {
+                _captureDevice = await _usbCamera.OpenAsync(cameraCharacteristics, OnPixelBufferArrived, token);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error starting UsbCameraFC: {ex}");
+                return false;
+            }
+
             if (_captureDevice == null)
                 return false;
 
@@ -125,7 +134,17 @@ namespace CameraLib.FlashCap
             _keepAliveTimer.Interval = FrameTimeout;
             _keepAliveTimer.Start();
 
-            await _captureDevice.StartAsync(token);
+            try
+            {
+                await _captureDevice.StartAsync(token);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Camera Start() failed: {ex}");
+                Stop();
+
+                return false;
+            }
 
             IsRunning = true;
 
@@ -181,9 +200,7 @@ namespace CameraLib.FlashCap
                         return;
 
                     CurrentFrameFormat ??= new FrameFormat(frame.Width, frame.Height);
-
                     ImageCapturedEvent?.Invoke(this, frame);
-
                     if (!_fpsTimer.IsRunning)
                     {
                         _fpsTimer.Start();
@@ -236,9 +253,12 @@ namespace CameraLib.FlashCap
                 {
                     try
                     {
-                        _captureDevice.StopAsync().Wait(5000);
+                        _captureDevice?.StopAsync().Wait(5000);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Camera Stop() failed: {ex}");
+                    }
                 }
 
                 CurrentFrameFormat = null;

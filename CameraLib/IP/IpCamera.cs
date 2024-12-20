@@ -30,8 +30,8 @@ namespace CameraLib.IP
         public double CurrentFps { get; private set; }
         public int FrameTimeout { get; set; } = 10000;
         public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
-
         public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
+
         private CancellationTokenSource? _cancellationTokenSource;
         private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
         private static List<CameraDescription> _lastCamerasFound = [];
@@ -77,7 +77,7 @@ namespace CameraLib.IP
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Can not connect to camera: {uri}\r\n{ex.Message}");
+                    Console.WriteLine($"Can not connect to camera: {uri}\r\n{ex}");
                 }
 
                 var mediaClient = new MediaClient(client);
@@ -207,7 +207,7 @@ namespace CameraLib.IP
             _cancellationTokenSource = new CancellationTokenSource();
             _cancellationTokenSourceCameraGrabber?.Dispose();
             _cancellationTokenSourceCameraGrabber = new CancellationTokenSource();
-            _captureDevice.SetExceptionMode(false);
+            _captureDevice?.SetExceptionMode(false);
             _fpsTimer.Reset();
             _frameCount = 0;
             _keepAliveTimer.Interval = FrameTimeout;
@@ -216,12 +216,20 @@ namespace CameraLib.IP
             _captureTask?.Dispose();
             _captureTask = Task.Run(async () =>
             {
-                while (!_cancellationTokenSourceCameraGrabber.Token.IsCancellationRequested)
+                try
                 {
-                    if (_captureDevice.Grab())
-                        CaptureImage();
-                    else
-                        await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
+                    while (!_cancellationTokenSourceCameraGrabber.Token.IsCancellationRequested)
+                    {
+                        if (_captureDevice?.Grab() ?? false)
+                            CaptureImage();
+                        else
+                            await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error getting image from camera: {ex}");
+                    await Task.Delay(1000);
                 }
 
                 IsRunning = false;
@@ -242,8 +250,17 @@ namespace CameraLib.IP
                 lock (_getPictureThreadLock)
                 {
                     var frame = new Mat();
-                    if (!(_captureDevice?.Retrieve(frame) ?? false) || frame == null)
+                    try
+                    {
+                        if (!(_captureDevice?.Retrieve(frame) ?? false) || frame == null)
+                            return;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error retrieving image from camera: {ex}");
+
                         return;
+                    }
 
                     CurrentFrameFormat ??= new FrameFormat(frame.Width, frame.Height);
 
@@ -298,7 +315,14 @@ namespace CameraLib.IP
                 {
                     _cancellationTokenSourceCameraGrabber?.Cancel();
                     _captureTask?.Wait(5000);
-                    _captureDevice.Release();
+                    try
+                    {
+                        _captureDevice?.Release();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error releasing camera: {ex}");
+                    }
                 }
 
                 if (cancellation)
@@ -331,12 +355,12 @@ namespace CameraLib.IP
             Mat? image = null;
             await Task.Run(async () =>
             {
-                _captureDevice = await GetCaptureDevice(token);
-                if (_captureDevice == null)
-                    return;
-
                 try
                 {
+                    _captureDevice = await GetCaptureDevice(token);
+                    if (_captureDevice == null)
+                        return;
+
                     if (_captureDevice.Grab())
                     {
                         image = new Mat();
@@ -349,8 +373,8 @@ namespace CameraLib.IP
                     Console.WriteLine(ex);
                 }
 
-                _captureDevice.Release();
-                _captureDevice.Dispose();
+                _captureDevice?.Release();
+                _captureDevice?.Dispose();
             }, token);
 
             return image;

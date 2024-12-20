@@ -83,7 +83,10 @@ namespace CameraLib.MJPEG
                             image.Dispose();
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"MJPEG camera initialization failed: {ex}");
+                    }
                 }
             }
 
@@ -147,6 +150,7 @@ namespace CameraLib.MJPEG
             catch (Exception ex)
             {
                 Console.WriteLine(ex);
+                Stop();
 
                 return false;
             }
