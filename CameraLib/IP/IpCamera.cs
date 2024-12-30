@@ -161,10 +161,10 @@ namespace CameraLib.IP
             Description = new CameraDescription(CameraType.IP, path, name, frameFormats);
             CurrentFps = Description.FrameFormats.FirstOrDefault()?.Fps ?? 10;
 
-            _keepAliveTimer.Elapsed += CameraDisconnected;
+            _keepAliveTimer.Elapsed += CheckCameraDisconnected;
         }
 
-        private async void CameraDisconnected(object? sender, ElapsedEventArgs e)
+        private async void CheckCameraDisconnected(object? sender, ElapsedEventArgs e)
         {
             if (_fpsTimer.ElapsedMilliseconds > FrameTimeout)
             {
@@ -229,7 +229,8 @@ namespace CameraLib.IP
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Error getting image from camera: {ex}");
-                    await Task.Delay(1000);
+                    Stop();
+                    //await Task.Delay(1000);
                 }
 
                 IsRunning = false;
@@ -309,14 +310,15 @@ namespace CameraLib.IP
 
             lock (_getPictureThreadLock)
             {
+                IsRunning = false;
                 _keepAliveTimer.Stop();
 
                 if (_captureDevice != null)
                 {
                     _cancellationTokenSourceCameraGrabber?.Cancel();
-                    _captureTask?.Wait(5000);
                     try
                     {
+                        _captureTask?.Wait(5000);
                         _captureDevice?.Release();
                     }
                     catch (Exception ex)
@@ -449,6 +451,7 @@ namespace CameraLib.IP
                     _keepAliveTimer.Dispose();
                     _captureDevice?.Dispose();
                     _cancellationTokenSource?.Dispose();
+                    _cancellationTokenSourceCameraGrabber?.Dispose();
                 }
 
                 _disposedValue = true;

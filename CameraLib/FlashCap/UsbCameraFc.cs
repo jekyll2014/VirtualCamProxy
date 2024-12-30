@@ -28,7 +28,7 @@ namespace CameraLib.FlashCap
         private readonly object _getPictureThreadLock = new();
         private readonly Stopwatch _fpsTimer = new();
         private byte _frameCount;
-        private readonly System.Timers.Timer _keepAliveTimer = new System.Timers.Timer();
+        private readonly System.Timers.Timer _keepAliveTimer = new();
         private int _width = 0;
         private int _height = 0;
         private string _format = string.Empty;
@@ -53,10 +53,10 @@ namespace CameraLib.FlashCap
             Description = new CameraDescription(CameraType.USB_FC, path, name, GetAllAvailableResolution(_usbCamera));
             CurrentFps = Description.FrameFormats.FirstOrDefault()?.Fps ?? 10;
 
-            _keepAliveTimer.Elapsed += CameraDisconnected;
+            _keepAliveTimer.Elapsed += CheckCameraDisconnected;
         }
 
-        private async void CameraDisconnected(object? sender, ElapsedEventArgs e)
+        private async void CheckCameraDisconnected(object? sender, ElapsedEventArgs e)
         {
             if (_fpsTimer.ElapsedMilliseconds > FrameTimeout)
             {
@@ -88,7 +88,7 @@ namespace CameraLib.FlashCap
             return result;
         }
 
-        private static IEnumerable<FrameFormat> GetAllAvailableResolution(CaptureDeviceDescriptor usbCamera)
+        private static List<FrameFormat> GetAllAvailableResolution(CaptureDeviceDescriptor usbCamera)
         {
             var formats = new List<FrameFormat>();
             foreach (var cameraCharacteristic in usbCamera.Characteristics)
@@ -167,14 +167,14 @@ namespace CameraLib.FlashCap
             }
             else
             {
-                characteristics = new List<VideoCharacteristics>(){
+                characteristics = [
                     characteristics.Aggregate((n, m) =>
                     {
                         if (n.Width * n.Height > m.Width * m.Height)
                             return n;
                         else
                             return m;
-                    })};
+                    })];
             }
 
             return characteristics.FirstOrDefault();
@@ -244,6 +244,7 @@ namespace CameraLib.FlashCap
 
             lock (_getPictureThreadLock)
             {
+                IsRunning = false;
                 _keepAliveTimer.Stop();
 
                 if (cancellation)
