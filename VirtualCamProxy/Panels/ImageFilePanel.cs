@@ -2,7 +2,7 @@
 
 using VirtualCamProxy.Settings;
 
-namespace VirtualCamProxy;
+namespace VirtualCamProxy.Panels;
 public partial class ImageFilePanel : UserControl
 {
     private readonly ImageFileCameraSettings _settings;
@@ -66,7 +66,7 @@ public partial class ImageFilePanel : UserControl
         {
             _settings.Container = FileContainer.Folder;
             if (_cameraHub.CurrentCamera is ImageFileCamera iCam)
-                iCam.SetFile(_settings.Files);
+                iCam.SetFiles(_settings.Files);
         }
     }
 
@@ -76,7 +76,7 @@ public partial class ImageFilePanel : UserControl
         {
             _settings.Container = FileContainer.FileList;
             if (_cameraHub.CurrentCamera is ImageFileCamera iCam)
-                iCam.SetFile(_settings.Files);
+                iCam.SetFiles(_settings.Files);
         }
     }
 }

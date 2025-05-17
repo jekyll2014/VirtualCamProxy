@@ -1,7 +1,10 @@
-﻿using System;
+﻿using OpenCvSharp;
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.NetworkInformation;
@@ -11,29 +14,27 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 
-using OpenCvSharp;
-
 using IPAddress = System.Net.IPAddress;
 
 namespace CameraLib.MJPEG
 {
     public class MjpegCamera : ICamera
     {
-        // JPEG delimiters
-        const byte picMarker = 0xFF;
-        const byte picStart = 0xD8;
-        const byte picEnd = 0xD9;
-
-        public AuthType AuthenicationType { get; }
+        public AuthType AuthenticationType { get; }
         public string Login { get; }
         public string Password { get; }
         public CameraDescription Description { get; set; }
         public bool IsRunning { get; set; } = false;
         public FrameFormat? CurrentFrameFormat { get; private set; }
         public double CurrentFps { get; private set; }
-        public int FrameTimeout { get; set; } = 10000;
+        public int FrameTimeout { get; set; } = 30000;
         public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
         public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
+
+        // JPEG delimiters
+        private const byte PicMarker = 0xFF;
+        private const byte PicStart = 0xD8;
+        private const byte PicEnd = 0xD9;
 
         private CancellationTokenSource? _cancellationTokenSource;
         private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
@@ -49,17 +50,16 @@ namespace CameraLib.MJPEG
 
         public MjpegCamera(string path,
             string name = "",
-            AuthType authenicationType = AuthType.None,
+            AuthType authenticationType = AuthType.None,
             string login = "",
-            string password = "",
-            int discoveryTimeout = 1000,
-            bool forceCameraConnect = false)
+            string password = ""
+            )
         {
-            AuthenicationType = authenicationType;
+            AuthenticationType = authenticationType;
             Login = login;
             Password = password;
 
-            if (authenicationType == AuthType.Plain)
+            if (authenticationType == AuthType.Plain)
                 path = string.Format(path, login, password);
 
             var cameraUri = new Uri(path);
@@ -67,33 +67,37 @@ namespace CameraLib.MJPEG
                 ? cameraUri.Host
                 : name;
 
-            List<FrameFormat> frameFormats = [];
-            Description = new CameraDescription(CameraType.IP, path, name, frameFormats);
+            Description = new CameraDescription(CameraType.IP, path, name, []);
+            _keepAliveTimer.Elapsed += CheckCameraDisconnected;
+        }
 
-            if (forceCameraConnect)
+        public async Task<bool> GetImageData(int discoveryTimeout = 5000)
+        {
+            var cameraUri = new Uri(Description.Path);
+            if (await PingAddress(cameraUri.Host, discoveryTimeout))
             {
-                if (PingAddress(cameraUri.Host, discoveryTimeout).Result)
+                try
                 {
-                    try
+                    var image = await GrabFrame(CancellationToken.None);
+                    if (image != null)
                     {
-                        var image = GrabFrame(CancellationToken.None).Result;
-                        if (image != null)
-                        {
-                            frameFormats.Add(new FrameFormat(image.Width, image.Height, "MJPG"));
-                            image.Dispose();
-                        }
+                        Description.FrameFormats = new[] { new FrameFormat(image.Width, image.Height, "MJPG") };
+                        image.Dispose();
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"MJPEG camera initialization failed: {ex}");
-                    }
+                    else
+                        return false;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"MJPEG camera initialization failed: {ex}");
+
+                    return false;
                 }
             }
+            else
+                return false;
 
-            Description = new CameraDescription(CameraType.IP, path, name, frameFormats);
-            CurrentFps = Description.FrameFormats.FirstOrDefault()?.Fps ?? 10;
-
-            _keepAliveTimer.Elapsed += CheckCameraDisconnected;
+            return Description.FrameFormats.Any();
         }
 
         private async void CheckCameraDisconnected(object? sender, ElapsedEventArgs e)
@@ -107,7 +111,7 @@ namespace CameraLib.MJPEG
         }
 
         // can not be implemented
-        public List<CameraDescription> DiscoverCamerasAsync(int discoveryTimeout, CancellationToken token)
+        public List<CameraDescription> DiscoverCameras(int discoveryTimeout)
         {
             return [];
         }
@@ -115,7 +119,13 @@ namespace CameraLib.MJPEG
         private static async Task<bool> PingAddress(string host, int pingTimeout = 3000)
         {
             if (!IPAddress.TryParse(host, out var destIp))
-                return false;
+            {
+                var h = await Dns.GetHostEntryAsync(host).ConfigureAwait(false);
+                if (h.AddressList.Any())
+                    host = h.AddressList.First().ToString();
+
+                return IPAddress.TryParse(host, out destIp);
+            }
 
             PingReply pingResultTask;
             using (var ping = new Ping())
@@ -148,7 +158,7 @@ namespace CameraLib.MJPEG
             try
             {
                 _imageGrabber?.Dispose();
-                _imageGrabber = StartAsync(Description.Path, AuthenicationType, _cancellationTokenSourceCameraGrabber.Token, Login, Password).WaitAsync(TimeSpan.FromMilliseconds(FrameTimeout), token);
+                _imageGrabber = StartAsync(Description.Path, AuthenticationType, _cancellationTokenSourceCameraGrabber.Token, Login, Password).WaitAsync(TimeSpan.FromMilliseconds(FrameTimeout), token);
             }
             catch (Exception ex)
             {
@@ -202,10 +212,13 @@ namespace CameraLib.MJPEG
             {
                 Mat? frame = null;
                 ImageCapturedEvent += CameraImageCapturedEvent;
-                while (IsRunning && frame == null && !token.IsCancellationRequested)
+                var watch = new Stopwatch();
+                watch.Restart();
+                while (IsRunning && frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
                     await Task.Delay(10, token);
 
                 ImageCapturedEvent -= CameraImageCapturedEvent;
+                watch.Stop();
 
                 return frame;
 
@@ -222,7 +235,13 @@ namespace CameraLib.MJPEG
                 {
                     image = await GrabFrame(token);
                     if (image != null)
+                    {
                         CurrentFrameFormat ??= new FrameFormat(image.Width, image.Height);
+                        if (!Description.FrameFormats.Any()
+                            || (Description.FrameFormats.Count() == 1
+                                && Description.FrameFormats.First().Width == 0))
+                            Description.FrameFormats = new[] { new FrameFormat(image.Width, image.Height) };
+                    }
                 }
 
                 Stop();
@@ -250,18 +269,18 @@ namespace CameraLib.MJPEG
         /// </summary>
         /// <param name="action">Delegate to run at each frame</param>
         /// <param name="url">url of the http stream (only basic auth is implemented)</param>
-        /// <param name="authenicationType"></param>
+        /// <param name="authenticationType"></param>
         /// <param name="login">optional login</param>
         /// <param name="password">optional password (only basic auth is implemented)</param>
         /// <param name="token">cancellation token used to cancel the stream parsing</param>
         /// <param name="chunkMaxSize">Max chunk byte size when reading stream</param>
         /// <param name="frameBufferSize">Maximum frame byte size</param>
         /// <returns></returns>
-        private async Task StartAsync(string url, AuthType authenicationType, CancellationToken token, string login = "", string password = "", int chunkMaxSize = 1024, int frameBufferSize = 1024 * 1024)
+        private async Task StartAsync(string url, AuthType authenticationType, CancellationToken token, string login = "", string password = "", int chunkMaxSize = 1024, int frameBufferSize = 1024 * 1024)
         {
             using (var httpClient = new HttpClient())
             {
-                if (authenicationType == AuthType.Basic)
+                if (authenticationType == AuthType.Basic)
                     httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
                         "Basic",
                         Convert.ToBase64String(Encoding.ASCII.GetBytes($"{login}:{password}")));
@@ -326,11 +345,11 @@ namespace CameraLib.MJPEG
                 current = streamBuffer[idx++];
 
                 // JPEG picture start ?
-                if (previous == picMarker && current == picStart)
+                if (previous == PicMarker && current == PicStart)
                 {
                     frameIdx = 2;
-                    frameBuffer[0] = picMarker;
-                    frameBuffer[1] = picStart;
+                    frameBuffer[0] = PicMarker;
+                    frameBuffer[1] = PicStart;
                     inPicture = true;
                     return;
                 }
@@ -347,7 +366,7 @@ namespace CameraLib.MJPEG
                 frameBuffer[frameIdx++] = current;
 
                 // JPEG picture end ?
-                if (previous == picMarker && current == picEnd)
+                if (previous == PicMarker && current == PicEnd)
                 {
                     if (Monitor.IsEntered(_getPictureThreadLock))
                     {
@@ -447,6 +466,7 @@ namespace CameraLib.MJPEG
                 {
                     Stop();
                     _imageGrabber?.Dispose();
+                    _keepAliveTimer.Elapsed -= CheckCameraDisconnected;
                     _keepAliveTimer.Close();
                     _keepAliveTimer.Dispose();
                     _cancellationTokenSource?.Dispose();

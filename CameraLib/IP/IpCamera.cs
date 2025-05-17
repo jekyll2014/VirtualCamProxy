@@ -21,14 +21,14 @@ namespace CameraLib.IP
 {
     public class IpCamera : ICamera
     {
-        public AuthType AuthenicationType { get; private set; }
+        public AuthType AuthenticationType { get; private set; }
         public string Login { get; private set; }
         public string Password { get; private set; }
         public CameraDescription Description { get; set; }
         public bool IsRunning { get; private set; } = false;
         public FrameFormat? CurrentFrameFormat { get; private set; }
         public double CurrentFps { get; private set; }
-        public int FrameTimeout { get; set; } = 10000;
+        public int FrameTimeout { get; set; } = 30000;
         public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
         public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
 
@@ -104,10 +104,16 @@ namespace CameraLib.IP
             return result;
         }
 
-        private static async Task<bool> PingAddress(string host, int pingTimeout = 3000)
+        private static async Task<bool> PingAddress(string host, int pingTimeout = 5000)
         {
             if (!IPAddress.TryParse(host, out var destIp))
-                return false;
+            {
+                var h = await Dns.GetHostEntryAsync(host).ConfigureAwait(false);
+                if (h.AddressList.Any())
+                    host = h.AddressList.First().ToString();
+
+                return IPAddress.TryParse(host, out destIp);
+            }
 
             PingReply pingResultTask;
             using (var ping = new Ping())
@@ -120,48 +126,47 @@ namespace CameraLib.IP
 
         public IpCamera(string path,
             string name = "",
-            AuthType authenicationType = AuthType.None,
+            AuthType authenticationType = AuthType.None,
             string login = "",
-            string password = "",
-            int discoveryTimeout = 1000,
-            bool forceCameraConnect = false)
+            string password = "")
         {
-            AuthenicationType = authenicationType;
+            AuthenticationType = authenticationType;
             Login = login;
             Password = password;
 
-            if (AuthenicationType == AuthType.Plain)
+            if (AuthenticationType == AuthType.Plain)
                 path = string.Format(path, Login, Password);
 
             name = string.IsNullOrEmpty(name)
                 ? Dns.GetHostAddresses(new Uri(path).Host).FirstOrDefault()?.ToString() ?? path
                 : name;
 
-            if (_lastCamerasFound.Count == 0)
-                _lastCamerasFound = DiscoverOnvifCamerasAsync(discoveryTimeout).Result;
-
-            var frameFormats = _lastCamerasFound.Find(n => n.Path == path)?.FrameFormats.ToList() ?? [];
-
-            Description = new CameraDescription(CameraType.IP, path, name, frameFormats);
-
-            if (frameFormats.Count == 0 || forceCameraConnect)
-            {
-                var cameraUri = new Uri(path);
-                if (PingAddress(cameraUri.Host).Result)
-                {
-                    var image = GrabFrame(CancellationToken.None).Result;
-                    if (image != null)
-                    {
-                        frameFormats.Add(new FrameFormat(image.Width, image.Height));
-                        image.Dispose();
-                    }
-                }
-            }
+            var frameFormats = _lastCamerasFound?
+                .Find(n => n.Path == path)?
+                .FrameFormats.ToList() ?? [];
 
             Description = new CameraDescription(CameraType.IP, path, name, frameFormats);
-            CurrentFps = Description.FrameFormats.FirstOrDefault()?.Fps ?? 10;
-
             _keepAliveTimer.Elapsed += CheckCameraDisconnected;
+        }
+
+        public async Task<bool> GetImageData(int discoveryTimeout = 5000)
+        {
+            var cameraUri = new Uri(Description.Path);
+            if (await PingAddress(cameraUri.Host, discoveryTimeout))
+            {
+                var image = await GrabFrame(CancellationToken.None);
+                if (image != null)
+                {
+                    Description.FrameFormats = new[] { new FrameFormat(image.Width, image.Height) };
+                    image.Dispose();
+                }
+                else
+                    return false;
+            }
+            else
+                return false;
+
+            return Description.FrameFormats.Any();
         }
 
         private async void CheckCameraDisconnected(object? sender, ElapsedEventArgs e)
@@ -174,7 +179,7 @@ namespace CameraLib.IP
             }
         }
 
-        public List<CameraDescription> DiscoverCamerasAsync(int discoveryTimeout, CancellationToken token)
+        public List<CameraDescription> DiscoverCameras(int discoveryTimeout)
         {
             return DiscoverOnvifCamerasAsync(discoveryTimeout).Result;
         }
@@ -223,14 +228,13 @@ namespace CameraLib.IP
                         if (_captureDevice?.Grab() ?? false)
                             CaptureImage();
                         else
-                            await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
+                            await Task.Delay(10, _cancellationTokenSourceCameraGrabber.Token);
                     }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Error getting image from camera: {ex}");
                     Stop();
-                    //await Task.Delay(1000);
                 }
 
                 IsRunning = false;
@@ -341,10 +345,13 @@ namespace CameraLib.IP
             {
                 Mat? frame = null;
                 ImageCapturedEvent += CameraImageCapturedEvent;
-                while (IsRunning && frame == null && !token.IsCancellationRequested)
+                var watch = new Stopwatch();
+                watch.Restart();
+                while (IsRunning && frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
                     await Task.Delay(10, token);
 
                 ImageCapturedEvent -= CameraImageCapturedEvent;
+                watch.Stop();
 
                 return frame;
 
@@ -367,7 +374,11 @@ namespace CameraLib.IP
                     {
                         image = new Mat();
                         if (_captureDevice.Retrieve(image))
+                        {
                             CurrentFrameFormat ??= new FrameFormat(image.Width, image.Height);
+                            if (!Description.FrameFormats.Any())
+                                Description.FrameFormats = new[] { new FrameFormat(image.Width, image.Height) };
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -396,7 +407,19 @@ namespace CameraLib.IP
 
         private async Task<VideoCapture?> GetCaptureDevice(CancellationToken token)
         {
-            return await Task.Run(() => new VideoCapture(Description.Path), token);
+            try
+            {
+                var t = Task.Run(() => new VideoCapture(Description.Path), token);
+                await t.WaitAsync(TimeSpan.FromMilliseconds(FrameTimeout), token);
+
+                return t.Result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Can not connect to camera: {Description.Path}\r\n{ex}");
+            }
+
+            return null;
         }
 
         public FrameFormat GetNearestFormat(int width, int height, string format)
@@ -447,6 +470,7 @@ namespace CameraLib.IP
                 if (disposing)
                 {
                     Stop();
+                    _keepAliveTimer.Elapsed -= CheckCameraDisconnected;
                     _keepAliveTimer.Close();
                     _keepAliveTimer.Dispose();
                     _captureDevice?.Dispose();

@@ -2,7 +2,7 @@
 
 using VirtualCamProxy.Settings;
 
-namespace VirtualCamProxy
+namespace VirtualCamProxy.Panels
 {
     public partial class FiltersPanel : UserControl
     {
@@ -11,12 +11,18 @@ namespace VirtualCamProxy
         {
             InitializeComponent();
             _settings = settings;
+            checkBox_grayscale.Checked = _settings.Grayscale;
             checkBox_flipHorizontal.Checked = _settings.FlipHorizontal;
             checkBox_flipVertical.Checked = _settings.FlipVertical;
             radioButton_rotateNone.Checked = _settings.Rotate == null;
             radioButton_rotate90.Checked = _settings.Rotate == RotateFlags.Rotate90Clockwise;
             radioButton_rotate180.Checked = _settings.Rotate == RotateFlags.Rotate180;
             radioButton_rotate270.Checked = _settings.Rotate == RotateFlags.Rotate90Counterclockwise;
+        }
+
+        private void checkBox_grayscale_CheckedChanged(object sender, EventArgs e)
+        {
+            _settings.Grayscale = checkBox_grayscale.Checked;
         }
 
         private void CheckBox_flipHorizontal_CheckedChanged(object sender, EventArgs e)
@@ -48,5 +54,6 @@ namespace VirtualCamProxy
         {
             _settings.Rotate = RotateFlags.Rotate90Counterclockwise;
         }
+
     }
 }

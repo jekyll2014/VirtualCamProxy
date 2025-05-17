@@ -13,7 +13,7 @@ namespace VirtualCamProxy.Panels
 
             textBox_path.Text = _camera.Description.Path;
             textBox_name.Text = _camera.Description.Name;
-            textBox_auth.Text = _camera.AuthenicationType.ToString();
+            textBox_auth.Text = _camera.AuthenticationType.ToString();
             textBox_login.Text = _camera.Login;
             textBox_password.Text = _camera.Password;
         }

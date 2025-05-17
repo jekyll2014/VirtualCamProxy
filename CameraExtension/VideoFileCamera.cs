@@ -52,6 +52,16 @@ public class VideoFileCamera : ICamera
         _keepAliveTimer.Elapsed += CameraDisconnected;
     }
 
+    public async Task<bool> GetImageData(int discoveryTimeout = 1000)
+    {
+        if (_videoFile == null)
+            return false;
+
+        Description.FrameFormats = GetFileResolution(_videoFile);
+
+        return Description.FrameFormats.Any();
+    }
+
     public void SetFile(string path)
     {
         SetFile([path]);
@@ -126,7 +136,7 @@ public class VideoFileCamera : ICamera
         }
     }
 
-    public List<CameraDescription> DiscoverCamerasAsync(int discoveryTimeout, CancellationToken token)
+    public List<CameraDescription> DiscoverCameras(int discoveryTimeout)
     {
         return DiscoverScreenCameras();
     }
@@ -195,7 +205,7 @@ public class VideoFileCamera : ICamera
                         await _cancellationTokenSourceCameraGrabber.CancelAsync();
                 }
                 else
-                    await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
+                    await Task.Delay(10, _cancellationTokenSourceCameraGrabber.Token);
             }
 
             Stop(true);
@@ -287,10 +297,13 @@ public class VideoFileCamera : ICamera
         {
             Mat? frame = null;
             ImageCapturedEvent += CameraImageCapturedEvent;
-            while (IsRunning && frame == null && !token.IsCancellationRequested)
+            var watch = new Stopwatch();
+            watch.Restart();
+            while (IsRunning && frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
                 await Task.Delay(10, token);
 
             ImageCapturedEvent -= CameraImageCapturedEvent;
+            watch.Stop();
 
             return frame;
 

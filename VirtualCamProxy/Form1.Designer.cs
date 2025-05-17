@@ -31,12 +31,13 @@
             button_camStart = new Button();
             comboBox_cameras = new ComboBox();
             pictureBox_cam = new PictureBox();
-            button_refresh = new Button();
+            button_refreshAll = new Button();
             button_camGetImage = new Button();
             splitContainer1 = new SplitContainer();
             checkBox_showStream = new CheckBox();
             comboBox_camResolution = new ComboBox();
             button_camStop = new Button();
+            button_refresh = new Button();
             tabControl2 = new TabControl();
             tabPage_cameraProperties = new TabPage();
             tabPage_filters2 = new TabPage();
@@ -76,7 +77,7 @@
             comboBox_cameras.FormattingEnabled = true;
             comboBox_cameras.Location = new Point(3, 3);
             comboBox_cameras.Name = "comboBox_cameras";
-            comboBox_cameras.Size = new Size(365, 23);
+            comboBox_cameras.Size = new Size(272, 23);
             comboBox_cameras.TabIndex = 1;
             comboBox_cameras.SelectedIndexChanged += ComboBox_cameras_SelectedIndexChanged;
             // 
@@ -85,21 +86,21 @@
             pictureBox_cam.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             pictureBox_cam.Location = new Point(3, 90);
             pictureBox_cam.Name = "pictureBox_cam";
-            pictureBox_cam.Size = new Size(365, 205);
+            pictureBox_cam.Size = new Size(364, 205);
             pictureBox_cam.SizeMode = PictureBoxSizeMode.Zoom;
             pictureBox_cam.TabIndex = 2;
             pictureBox_cam.TabStop = false;
             // 
-            // button_refresh
+            // button_refreshAll
             // 
-            button_refresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            button_refresh.Location = new Point(293, 32);
-            button_refresh.Name = "button_refresh";
-            button_refresh.Size = new Size(75, 23);
-            button_refresh.TabIndex = 0;
-            button_refresh.Text = "Refresh";
-            button_refresh.UseVisualStyleBackColor = true;
-            button_refresh.Click += Button_refresh_Click;
+            button_refreshAll.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            button_refreshAll.Location = new Point(281, 3);
+            button_refreshAll.Name = "button_refreshAll";
+            button_refreshAll.Size = new Size(86, 23);
+            button_refreshAll.TabIndex = 0;
+            button_refreshAll.Text = "Refresh all";
+            button_refreshAll.UseVisualStyleBackColor = true;
+            button_refreshAll.Click += Button_refreshAll_Click;
             // 
             // button_camGetImage
             // 
@@ -126,6 +127,7 @@
             splitContainer1.Panel1.Controls.Add(comboBox_camResolution);
             splitContainer1.Panel1.Controls.Add(button_camStop);
             splitContainer1.Panel1.Controls.Add(button_refresh);
+            splitContainer1.Panel1.Controls.Add(button_refreshAll);
             splitContainer1.Panel1.Controls.Add(pictureBox_cam);
             splitContainer1.Panel1.Controls.Add(button_camGetImage);
             // 
@@ -133,7 +135,7 @@
             // 
             splitContainer1.Panel2.Controls.Add(tabControl2);
             splitContainer1.Size = new Size(760, 302);
-            splitContainer1.SplitterDistance = 375;
+            splitContainer1.SplitterDistance = 374;
             splitContainer1.TabIndex = 4;
             // 
             // checkBox_showStream
@@ -154,8 +156,9 @@
             comboBox_camResolution.FormattingEnabled = true;
             comboBox_camResolution.Location = new Point(3, 32);
             comboBox_camResolution.Name = "comboBox_camResolution";
-            comboBox_camResolution.Size = new Size(284, 23);
+            comboBox_camResolution.Size = new Size(272, 23);
             comboBox_camResolution.TabIndex = 1;
+            comboBox_camResolution.SelectedIndexChanged += comboBox_camResolution_SelectedIndexChanged;
             // 
             // button_camStop
             // 
@@ -167,6 +170,17 @@
             button_camStop.UseVisualStyleBackColor = true;
             button_camStop.Click += Button_camStop_Click;
             // 
+            // button_refresh
+            // 
+            button_refresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            button_refresh.Location = new Point(281, 31);
+            button_refresh.Name = "button_refresh";
+            button_refresh.Size = new Size(86, 23);
+            button_refresh.TabIndex = 0;
+            button_refresh.Text = "Refresh";
+            button_refresh.UseVisualStyleBackColor = true;
+            button_refresh.Click += Button_refresh_Click;
+            // 
             // tabControl2
             // 
             tabControl2.Controls.Add(tabPage_cameraProperties);
@@ -175,7 +189,7 @@
             tabControl2.Location = new Point(0, 0);
             tabControl2.Name = "tabControl2";
             tabControl2.SelectedIndex = 0;
-            tabControl2.Size = new Size(377, 298);
+            tabControl2.Size = new Size(378, 298);
             tabControl2.TabIndex = 0;
             // 
             // tabPage_cameraProperties
@@ -183,7 +197,7 @@
             tabPage_cameraProperties.Location = new Point(4, 24);
             tabPage_cameraProperties.Name = "tabPage_cameraProperties";
             tabPage_cameraProperties.Padding = new Padding(3);
-            tabPage_cameraProperties.Size = new Size(369, 270);
+            tabPage_cameraProperties.Size = new Size(370, 270);
             tabPage_cameraProperties.TabIndex = 0;
             tabPage_cameraProperties.Text = "Camera properties";
             tabPage_cameraProperties.UseVisualStyleBackColor = true;
@@ -193,7 +207,7 @@
             tabPage_filters2.Location = new Point(4, 24);
             tabPage_filters2.Name = "tabPage_filters2";
             tabPage_filters2.Padding = new Padding(3);
-            tabPage_filters2.Size = new Size(847, 504);
+            tabPage_filters2.Size = new Size(370, 270);
             tabPage_filters2.TabIndex = 1;
             tabPage_filters2.Text = "Filters";
             tabPage_filters2.UseVisualStyleBackColor = true;
@@ -235,7 +249,7 @@
             textBox_x.Size = new Size(44, 23);
             textBox_x.TabIndex = 7;
             textBox_x.Text = "1920";
-            textBox_x.TextChanged += TextBox_x_TextChanged;
+            textBox_x.Leave += textBox_x_Leave;
             // 
             // label2
             // 
@@ -263,7 +277,7 @@
             textBox_y.Size = new Size(44, 23);
             textBox_y.TabIndex = 7;
             textBox_y.Text = "1080";
-            textBox_y.TextChanged += TextBox_y_TextChanged;
+            textBox_y.Leave += textBox_y_Leave;
             // 
             // label_currentSource
             // 
@@ -323,7 +337,7 @@
         private Button button_camStart;
         private ComboBox comboBox_cameras;
         private PictureBox pictureBox_cam;
-        private Button button_refresh;
+        private Button button_refreshAll;
         private Button button_camGetImage;
         private Button button_camStop;
         private Button button_softCamStop;
@@ -343,5 +357,6 @@
         private TabControl tabControl2;
         private TabPage tabPage_cameraProperties;
         private TabPage tabPage_filters2;
+        private Button button_refresh;
     }
 }

@@ -20,7 +20,8 @@ namespace CameraLib
 
         public CancellationToken CancellationToken { get; }
 
-        public List<CameraDescription> DiscoverCamerasAsync(int discoveryTimeout, CancellationToken token);
+        public Task<bool> GetImageData(int discoveryTimeout = 5000);
+        public List<CameraDescription> DiscoverCameras(int discoveryTimeout);
         public Task<bool> Start(int width, int height, string format, CancellationToken token);
         public void Stop();
         public Task<Mat?> GrabFrame(CancellationToken token);

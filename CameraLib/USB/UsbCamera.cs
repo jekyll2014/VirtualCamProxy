@@ -25,7 +25,7 @@ namespace CameraLib.USB
 
         private CancellationTokenSource? _cancellationTokenSource;
         private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
-        private readonly DsDevice? _usbCamera;
+        private readonly DsDevice _usbCamera;
         private readonly object _getPictureThreadLock = new();
         private VideoCapture? _captureDevice;
         private Task? _captureTask;
@@ -56,6 +56,13 @@ namespace CameraLib.USB
             _keepAliveTimer.Elapsed += CheckCameraDisconnected;
         }
 
+        public async Task<bool> GetImageData(int discoveryTimeout = 1000)
+        {
+            Description.FrameFormats = GetAllAvailableResolution(_usbCamera);
+
+            return Description.FrameFormats.Any();
+        }
+
         private async void CheckCameraDisconnected(object? sender, ElapsedEventArgs e)
         {
             if (_fpsTimer.ElapsedMilliseconds > FrameTimeout)
@@ -66,7 +73,7 @@ namespace CameraLib.USB
             }
         }
 
-        public List<CameraDescription> DiscoverCamerasAsync(int discoveryTimeout, CancellationToken token)
+        public List<CameraDescription> DiscoverCameras(int discoveryTimeout)
         {
             return DiscoverUsbCameras();
         }
@@ -199,7 +206,7 @@ namespace CameraLib.USB
                     if (_captureDevice.Grab())
                         CaptureImage();
                     else
-                        await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
+                        await Task.Delay(10, _cancellationTokenSourceCameraGrabber.Token);
                 }
 
                 IsRunning = false;
@@ -285,15 +292,15 @@ namespace CameraLib.USB
                 IsRunning = false;
                 _keepAliveTimer.Stop();
 
-                if (cancellation)
-                    _cancellationTokenSource?.Cancel();
-
                 if (_captureDevice != null)
                 {
                     _cancellationTokenSourceCameraGrabber?.Cancel();
                     _captureTask?.Wait(5000);
                     _captureDevice.Release();
                 }
+
+                if (cancellation)
+                    _cancellationTokenSource?.Cancel();
 
                 CurrentFrameFormat = null;
                 _fpsTimer.Reset();
@@ -306,10 +313,13 @@ namespace CameraLib.USB
             {
                 Mat? frame = null;
                 ImageCapturedEvent += CameraImageCapturedEvent;
-                while (IsRunning && frame == null && !token.IsCancellationRequested)
+                var watch = new Stopwatch();
+                watch.Restart();
+                while (IsRunning && frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
                     await Task.Delay(10, token);
 
                 ImageCapturedEvent -= CameraImageCapturedEvent;
+                watch.Stop();
 
                 return frame;
 

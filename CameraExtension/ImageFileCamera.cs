@@ -45,12 +45,22 @@ public class ImageFileCamera : ICamera
         CurrentFps = 0;
     }
 
-    public void SetFile(string path)
+    public async Task<bool> GetImageData(int discoveryTimeout = 1000)
     {
-        SetFile([path]);
+        if (string.IsNullOrEmpty(_imageFile))
+            return false;
+
+        Description.FrameFormats = GetFileResolution(_imageFile);
+
+        return Description.FrameFormats.Any();
     }
 
-    public void SetFile(List<string> paths)
+    public void SetFile(string path)
+    {
+        SetFiles([path]);
+    }
+
+    public void SetFiles(List<string> paths)
     {
         if (!string.IsNullOrEmpty(_imageFile))
             _imageFile = string.Empty;
@@ -99,7 +109,7 @@ public class ImageFileCamera : ICamera
         return true;
     }
 
-    public List<CameraDescription> DiscoverCamerasAsync(int discoveryTimeout, CancellationToken token)
+    public List<CameraDescription> DiscoverCameras(int discoveryTimeout)
     {
         return DiscoverScreenCameras();
     }
@@ -158,7 +168,7 @@ public class ImageFileCamera : ICamera
                         await _cancellationTokenSourceCameraGrabber.CancelAsync();
                 }
                 else
-                    await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
+                    await Task.Delay(10, _cancellationTokenSourceCameraGrabber.Token);
             }
 
             Stop(true);
@@ -254,10 +264,13 @@ public class ImageFileCamera : ICamera
         {
             Mat? frame = null;
             ImageCapturedEvent += CameraImageCapturedEvent;
-            while (IsRunning && frame == null && !token.IsCancellationRequested)
+            var watch = new Stopwatch();
+            watch.Restart();
+            while (IsRunning && frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
                 await Task.Delay(10, token);
 
             ImageCapturedEvent -= CameraImageCapturedEvent;
+            watch.Stop();
 
             return frame;
 

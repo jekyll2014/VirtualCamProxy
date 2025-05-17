@@ -64,6 +64,13 @@ public class ScreenCamera : ICamera
         _keepAliveTimer.Elapsed += CameraDisconnected;
     }
 
+    public async Task<bool> GetImageData(int discoveryTimeout = 1000)
+    {
+        Description.FrameFormats = GetAllAvailableResolution();
+
+        return Description.FrameFormats.Any();
+    }
+
     private async void CameraDisconnected(object? sender, ElapsedEventArgs e)
     {
         if (_fpsTimer.ElapsedMilliseconds > FrameTimeout)
@@ -74,7 +81,7 @@ public class ScreenCamera : ICamera
         }
     }
 
-    public List<CameraDescription> DiscoverCamerasAsync(int discoveryTimeout, CancellationToken token)
+    public List<CameraDescription> DiscoverCameras(int discoveryTimeout)
     {
         return DiscoverScreenCameras();
     }
@@ -153,7 +160,7 @@ public class ScreenCamera : ICamera
                     ImageCaptured(dstImage);
                 }
                 else
-                    await Task.Delay(1, _cancellationTokenSourceCameraGrabber.Token);
+                    await Task.Delay(10, _cancellationTokenSourceCameraGrabber.Token);
             }
 
             srcImage.Dispose();
@@ -265,10 +272,13 @@ public class ScreenCamera : ICamera
         {
             Mat? frame = null;
             ImageCapturedEvent += CameraImageCapturedEvent;
-            while (IsRunning && frame == null && !token.IsCancellationRequested)
+            var watch = new Stopwatch();
+            watch.Restart();
+            while (IsRunning && frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
                 await Task.Delay(10, token);
 
             ImageCapturedEvent -= CameraImageCapturedEvent;
+            watch.Stop();
 
             return frame;
 

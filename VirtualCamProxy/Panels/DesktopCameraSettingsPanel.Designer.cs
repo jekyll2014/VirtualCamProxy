@@ -1,5 +1,5 @@
 ﻿
-namespace VirtualCamProxy
+namespace VirtualCamProxy.Panels
 {
     partial class DesktopCameraSettingsPanel
     {

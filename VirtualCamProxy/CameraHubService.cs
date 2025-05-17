@@ -33,60 +33,70 @@ public class CameraHubService : IDisposable
 
         // add custom cameras
         Console.WriteLine("Adding predefined cameras...");
-        Parallel.ForEach(_cameraSettings.CustomCameras, (c) =>
+        Parallel.ForEach(_cameraSettings.CustomCameras, async (cam) =>
         {
-            Console.WriteLine($"\t{c.Name}");
-            ICamera serverCamera;
-            if (c.Type == CameraType.IP)
+            Console.WriteLine($"\t{cam.Name}");
+            ICamera? serverCamera = null;
+            if (cam.Type == CameraType.IP)
             {
-                serverCamera =
-                    new IpCamera(path: c.Path,
-                        name: c.Name,
-                        authenicationType: c.AuthenicationType,
-                        login: c.Login,
-                        password: c.Password,
-                        discoveryTimeout: _cameraSettings.DiscoveryTimeOut,
-                        forceCameraConnect: _cameraSettings.ForceCameraConnect);
-            }
-            else if (c.Type == CameraType.MJPEG)
-            {
-                serverCamera = new MjpegCamera(path: c.Path,
-                        name: c.Name,
-                        authenicationType: c.AuthenicationType,
-                        login: c.Login,
-                        password: c.Password,
-                        discoveryTimeout: _cameraSettings.DiscoveryTimeOut,
-                        forceCameraConnect: _cameraSettings.ForceCameraConnect);
-            }
-            else if (c.Type == CameraType.USB)
-            {
-                try
-                {
-                    serverCamera = new UsbCamera(c.Path, c.Name);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex);
-                    return;
-                }
-            }
-            else if (c.Type == CameraType.USB_FC)
-            {
-                try
-                {
-                    serverCamera = new UsbCameraFc(c.Path, c.Name);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex);
-                    return;
-                }
-            }
-            else
-                return;
+                serverCamera = new IpCamera(path: cam.Path,
+                        name: cam.Name,
+                        authenticationType: cam.AuthenticationType,
+                        login: cam.Login,
+                        password: cam.Password);
 
-            serverCamera.FrameTimeout = _cameraSettings.FrameTimeout;
-            Cameras.Add(serverCamera);
+                if (cam.ForceConnect)
+                {
+                    await serverCamera.GetImageData(_cameraSettings.DiscoveryTimeOut);
+                }
+                else
+                    serverCamera.Description.FrameFormats = new[] { new FrameFormat(0, 0, "") };
+            }
+            else if (cam.Type == CameraType.MJPEG)
+            {
+                serverCamera = new MjpegCamera(path: cam.Path,
+                    name: cam.Name,
+                    authenticationType: cam.AuthenticationType,
+                    login: cam.Login,
+                    password: cam.Password);
+
+                if (cam.ForceConnect)
+                    await serverCamera.GetImageData(_cameraSettings.DiscoveryTimeOut);
+                else
+                    serverCamera.Description.FrameFormats = new[] { new FrameFormat(0, 0, "MJPG") };
+            }
+            else if (cam.Type == CameraType.USB)
+            {
+                try
+                {
+                    serverCamera = new UsbCamera(cam.Path, cam.Name);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex);
+
+                    return;
+                }
+            }
+            else if (cam.Type == CameraType.USB_FC)
+            {
+                try
+                {
+                    serverCamera = new UsbCameraFc(cam.Path, cam.Name);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex);
+
+                    return;
+                }
+            }
+
+            if (serverCamera != null)
+            {
+                serverCamera.FrameTimeout = _cameraSettings.FrameTimeout;
+                Cameras.Add(serverCamera);
+            }
         });
 
         List<CameraDescription> ipCameras = [];
@@ -266,6 +276,7 @@ public class CameraHubService : IDisposable
             {
                 // TODO: dispose managed state (managed objects)
                 UnHookCamera();
+                CurrentCamera?.Dispose();
                 foreach (var cam in Cameras)
                     cam.Dispose();
             }

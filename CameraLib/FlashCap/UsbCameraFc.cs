@@ -56,6 +56,13 @@ namespace CameraLib.FlashCap
             _keepAliveTimer.Elapsed += CheckCameraDisconnected;
         }
 
+        public async Task<bool> GetImageData(int discoveryTimeout = 1000)
+        {
+            Description.FrameFormats = GetAllAvailableResolution(_usbCamera);
+
+            return Description.FrameFormats.Any();
+        }
+
         private async void CheckCameraDisconnected(object? sender, ElapsedEventArgs e)
         {
             if (_fpsTimer.ElapsedMilliseconds > FrameTimeout)
@@ -66,7 +73,7 @@ namespace CameraLib.FlashCap
             }
         }
 
-        public List<CameraDescription> DiscoverCamerasAsync(int discoveryTimeout, CancellationToken token)
+        public List<CameraDescription> DiscoverCameras(int discoveryTimeout)
         {
             return DiscoverUsbCameras();
         }
@@ -247,9 +254,6 @@ namespace CameraLib.FlashCap
                 IsRunning = false;
                 _keepAliveTimer.Stop();
 
-                if (cancellation)
-                    _cancellationTokenSource?.Cancel();
-
                 if (_captureDevice != null)
                 {
                     try
@@ -261,6 +265,9 @@ namespace CameraLib.FlashCap
                         Console.WriteLine($"Camera Stop() failed: {ex}");
                     }
                 }
+
+                if (cancellation)
+                    _cancellationTokenSource?.Cancel();
 
                 CurrentFrameFormat = null;
                 _fpsTimer.Reset();
@@ -274,10 +281,13 @@ namespace CameraLib.FlashCap
             {
                 Mat? frame = null;
                 ImageCapturedEvent += CameraImageCapturedEvent;
-                while (IsRunning && frame == null && !token.IsCancellationRequested)
+                var watch = new Stopwatch();
+                watch.Restart();
+                while (IsRunning && frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
                     await Task.Delay(10, token);
 
                 ImageCapturedEvent -= CameraImageCapturedEvent;
+                watch.Stop();
 
                 return frame;
 
