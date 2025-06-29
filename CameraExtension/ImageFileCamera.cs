@@ -25,6 +25,7 @@ public class ImageFileCamera : ICamera
     private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
     private readonly Stopwatch _fpsTimer = new();
+    private Mat? _frame = new Mat();
     private byte _frameCount;
     private readonly List<string> _fileNames = [];
     private int _fileIndex = 0;
@@ -41,7 +42,7 @@ public class ImageFileCamera : ICamera
         Description = new CameraDescription(CameraType.VideoFile,
             path,
             name,
-            GetFileResolution(path));
+            GetFileResolution(path).ToArray());
         CurrentFps = 0;
     }
 
@@ -50,7 +51,7 @@ public class ImageFileCamera : ICamera
         if (string.IsNullOrEmpty(_imageFile))
             return false;
 
-        Description.FrameFormats = GetFileResolution(_imageFile);
+        Description.FrameFormats = GetFileResolution(_imageFile).ToArray();
 
         return Description.FrameFormats.Any();
     }
@@ -76,7 +77,7 @@ public class ImageFileCamera : ICamera
 
             _imageFile = file;
             Description.Path = file;
-            Description.FrameFormats = GetFileResolution(_imageFile);
+            Description.FrameFormats = GetFileResolution(_imageFile).ToArray();
             CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
             CurrentFps = CurrentFrameFormat?.Fps ?? 0;
         }
@@ -102,7 +103,7 @@ public class ImageFileCamera : ICamera
             return false;
 
         Description.Path = _imageFile;
-        Description.FrameFormats = GetFileResolution(_imageFile);
+        Description.FrameFormats = GetFileResolution(_imageFile).ToArray();
         CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
         CurrentFps = CurrentFrameFormat?.Fps ?? 0;
 
@@ -129,16 +130,18 @@ public class ImageFileCamera : ICamera
                 new FrameFormat(0, 0, "", 1000f / Delay)
             ];
 
-        Mat? img = null;
         try
         {
-            img = Cv2.ImRead(path, ImreadModes.Color);
+            _frame = Cv2.ImRead(path, ImreadModes.Color);
         }
-        catch { }
+        catch
+        {
+            // Ignore if the file is not an image
+        }
 
         return
         [
-            new FrameFormat(img?.Width??0, img?.Height??0, new FileInfo(path).Extension, 1000f / Delay)
+            new FrameFormat(_frame?.Width??0, _frame?.Height??0, new FileInfo(path).Extension, 1000f / Delay)
         ];
     }
 
@@ -168,7 +171,7 @@ public class ImageFileCamera : ICamera
                         await _cancellationTokenSourceCameraGrabber.CancelAsync();
                 }
                 else
-                    await Task.Delay(10, _cancellationTokenSourceCameraGrabber.Token);
+                    await Task.Delay(10, CancellationToken.None);
             }
 
             Stop(true);
@@ -188,44 +191,45 @@ public class ImageFileCamera : ICamera
         {
             lock (_getPictureThreadLock)
             {
-                Mat? frame = null;
                 try
                 {
-                    frame = Cv2.ImRead(file, ImreadModes.Color);
+                    _frame = Cv2.ImRead(file, ImreadModes.Color);
                 }
-                catch { }
+                catch
+                {
+                    // Ignore if the file is not an image
+                }
 
-                if (frame == null)
+                if (_frame == null)
                     return;
 
-                CurrentFrameFormat ??= new FrameFormat(frame.Width, frame.Height);
+                CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
+                ImageCapturedEvent?.Invoke(this, _frame);
+            }
 
-                ImageCapturedEvent?.Invoke(this, frame);
-
-                if (!_fpsTimer.IsRunning)
+            if (!_fpsTimer.IsRunning)
+            {
+                _fpsTimer.Start();
+                _frameCount = 0;
+            }
+            else
+            {
+                _frameCount++;
+                if (_frameCount >= 100)
                 {
-                    _fpsTimer.Start();
+                    if (_fpsTimer.ElapsedMilliseconds > 0)
+                        CurrentFps = (double)_frameCount / ((double)_fpsTimer.ElapsedMilliseconds / (double)1000);
+
+                    _fpsTimer.Reset();
                     _frameCount = 0;
                 }
-                else
-                {
-                    _frameCount++;
-                    if (_frameCount >= 100)
-                    {
-                        if (_fpsTimer.ElapsedMilliseconds > 0)
-                            CurrentFps = (double)_frameCount / ((double)_fpsTimer.ElapsedMilliseconds / (double)1000);
+            }
 
-                        _fpsTimer.Reset();
-                        _frameCount = 0;
-                    }
-                }
-
-                _gcCounter++;
-                if (_gcCounter >= 10)
-                {
-                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
-                    _gcCounter = 0;
-                }
+            _gcCounter++;
+            if (_gcCounter >= 10)
+            {
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
+                _gcCounter = 0;
             }
         }
         catch
@@ -244,7 +248,7 @@ public class ImageFileCamera : ICamera
         if (!IsRunning)
             return;
 
-        lock (_getPictureThreadLock)
+        //lock (_getPictureThreadLock)
         {
             if (cancellation)
             {
@@ -262,35 +266,39 @@ public class ImageFileCamera : ICamera
     {
         if (IsRunning)
         {
-            Mat? frame = null;
             ImageCapturedEvent += CameraImageCapturedEvent;
             var watch = new Stopwatch();
             watch.Restart();
-            while (IsRunning && frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
-                await Task.Delay(10, token);
+            while (IsRunning
+                   && (_frame == null || _frame.Empty())
+                   && !token.IsCancellationRequested
+                   && watch.ElapsedMilliseconds < FrameTimeout)
+                await Task.Delay(10, CancellationToken.None);
 
             ImageCapturedEvent -= CameraImageCapturedEvent;
             watch.Stop();
 
-            return frame;
+            return _frame;
 
             void CameraImageCapturedEvent(ICamera camera, Mat image)
             {
-                frame = image?.Clone();
+                _frame = image;
             }
         }
 
         if (string.IsNullOrEmpty(_imageFile) || !File.Exists(_imageFile))
             SetNextFile(true);
 
-        Mat? image = null;
         try
         {
-            image = Cv2.ImRead(_imageFile, ImreadModes.Color);
+            _frame = Cv2.ImRead(_imageFile, ImreadModes.Color);
         }
-        catch { }
+        catch
+        {
+            // Ignore if the file is not an image
+        }
 
-        return image;
+        return _frame;
     }
 
     public async IAsyncEnumerable<Mat> GrabFrames([EnumeratorCancellation] CancellationToken token)
@@ -299,7 +307,7 @@ public class ImageFileCamera : ICamera
         {
             var image = await GrabFrame(token);
             if (image == null)
-                await Task.Delay(10, token);
+                await Task.Delay(10, CancellationToken.None);
             else
                 yield return image;
         }

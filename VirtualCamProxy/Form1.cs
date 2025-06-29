@@ -21,14 +21,21 @@ public partial class Form1 : Form
 {
     private const string ConfigFileName = "appsettings.json";
     private const string SoftCamName = "DirectShow Softcam";
+    private const string FrameFormatPattern = "{0}x{1} {2} {3}fps";
+
     private readonly JsonStorage<SoftCameraSettings> _configuration = new(ConfigFileName, true);
     private readonly SoftCameraSettings _settings;
-    private Task? _cameraFeed;
+    //private Task? _cameraFeed;
     private CancellationToken? _cancellationToken;
     private readonly CameraHubService _cameraHub;
     private bool _cameraStarted = false;
     private SoftCamera? _softCamera;
     private ICamera? _currentSource;
+    private static Mat? _resizedImage = new Mat();
+    private static Mat? _resizedImage2 = new Mat();
+    private Mat? _filtered = new Mat();
+    private static Mat? _rotated = new Mat();
+    private Bitmap? _bitmap = null;
 
     public Form1()
     {
@@ -55,7 +62,7 @@ public partial class Form1 : Form
 
     private void Form1_FormClosing(object sender, FormClosingEventArgs e)
     {
-        if (!(_cameraFeed?.IsCompleted ?? true))
+        if (_cameraStarted)
         {
             Button_camStop_Click(this, EventArgs.Empty);
             Button_softCamStop_Click(this, EventArgs.Empty);
@@ -63,40 +70,37 @@ public partial class Form1 : Form
 
         _cameraHub.Dispose();
         _configuration.Save();
-        if (_cameraFeed?.IsCompleted ?? false)
-            _cameraFeed?.Dispose();
 
         _softCamera?.Dispose();
     }
 
-    private async Task CameraFeed()
+    /*private async Task CameraFeed()
     {
         _cameraStarted = true;
         var softCamWidth = _settings.Width;
         var softCamHeight = _settings.Height;
+        Bitmap? bitmap = null;
         while (!(_cancellationToken?.IsCancellationRequested ?? true))
         {
-            if (_cameraHub.ImageQueue.TryDequeue(out var image) && _softCamera != null)
+            if (_softCamera != null && !(_cameraHub.Image == null || _cameraHub.Image.Empty()))
             {
-                if (_softCamera.AppIsConnected)
-                {
-                    var filtered = ApplyFilters(image, _settings.Filters, softCamWidth, softCamHeight);
-                    var bitmap = MatToBitmap(filtered);
-                    filtered?.Dispose();
-                    if (bitmap != null)
-                    {
-                        _softCamera.PushFrame(bitmap);
-                        if (_settings.ShowStream)
-                        {
-                            var bmp = (Bitmap)bitmap.Clone();
-                            this.Invoke(() => { pictureBox_cam.Image = bmp; });
-                        }
+                if (!_softCamera.AppIsConnected)
+                    continue;
 
-                        bitmap.Dispose();
+                var image = _cameraHub.Image;
+                _filtered = ApplyFilters(image, _settings.Filters, softCamWidth, softCamHeight);
+                bitmap = MatToBitmap(_filtered);
+                if (bitmap != null)
+                {
+                    _softCamera.PushFrame(bitmap);
+                    if (_settings.ShowStream)
+                    {
+                        this.Invoke(() =>
+                        {
+                            pictureBox_cam.Image = bitmap;
+                        });
                     }
                 }
-
-                image.Dispose();
             }
             else
             {
@@ -105,6 +109,29 @@ public partial class Form1 : Form
         }
 
         _cameraStarted = false;
+    }*/
+
+    private async void ImageCapturedEvent(ICamera camera, Mat frame)
+    {
+        if (_softCamera == null || frame.Empty())
+            return;
+
+        if (!_softCamera.AppIsConnected)
+            return;
+
+        _filtered = ApplyFilters(frame, _settings.Filters, _settings.Width, _settings.Height);
+        _bitmap = MatToBitmap(_filtered);
+        if (_bitmap == null)
+            return;
+
+        _softCamera.PushFrame(_bitmap);
+        if (_settings.ShowStream)
+        {
+            this.Invoke(() =>
+            {
+                pictureBox_cam.Image = _bitmap;
+            });
+        }
     }
 
     #region Camera tab
@@ -182,7 +209,10 @@ public partial class Form1 : Form
             return;
         }
 
-        _cameraFeed = Task.Run(CameraFeed, (CancellationToken)_cancellationToken);
+        //_cameraFeed = Task.Run(CameraFeed, (CancellationToken)_cancellationToken);
+        _cameraStarted = true;
+        _cameraHub.ImageCapturedEvent += ImageCapturedEvent;
+
         RefreshUi();
     }
 
@@ -191,16 +221,8 @@ public partial class Form1 : Form
         DisableUi();
 
         _cameraStarted = false;
+        _cameraHub.ImageCapturedEvent -= ImageCapturedEvent;
         _cameraHub.UnHookCamera();
-        try
-        {
-            if (_cameraFeed != null && !_cameraFeed.IsCompleted)
-                await _cameraFeed.WaitAsync(CancellationToken.None);
-        }
-        catch
-        {
-            MessageBox.Show("Can't stop camera");
-        }
 
         RefreshUi();
     }
@@ -233,7 +255,7 @@ public partial class Form1 : Form
         DisableUi();
         button_refresh.Text = "Refreshing...";
 
-        var image = await camera.GetImageData();
+        await camera.GetImageData();
         ComboBox_cameras_SelectedIndexChanged(this, EventArgs.Empty);
 
         button_refresh.Text = "Refresh";
@@ -283,6 +305,37 @@ public partial class Form1 : Form
         else
             textBox_currentSource.Clear();
 
+        var camera = _cameraHub.GetCamera(comboBox_cameras.SelectedIndex);
+        if (camera != null)
+        {
+            var cameraFormats = camera.Description.FrameFormats;
+            if (cameraFormats?.Count() == 1)
+            {
+                var i = 0;
+                foreach (var format in cameraFormats)
+                {
+                    if (comboBox_camResolution.Items[i]?.ToString() != string.Format(
+                            FrameFormatPattern,
+                            format.Width,
+                            format.Height,
+                            format.Format,
+                            format.Fps))
+                    {
+                        comboBox_camResolution.Items[i] = string.Format(
+                            FrameFormatPattern,
+                            format.Width,
+                            format.Height,
+                            format.Format,
+                            format.Fps);
+
+                        i++;
+                    }
+
+                    i++;
+                }
+            }
+        }
+
         button_camGetImage.Enabled = (comboBox_cameras.SelectedIndex >= 0) && (comboBox_camResolution.SelectedIndex >= 0);
         button_refreshAll.Enabled = !(_currentSource?.IsRunning ?? false);
         button_refresh.Enabled = !(_currentSource?.IsRunning ?? false) && (comboBox_cameras.SelectedIndex >= 0);
@@ -305,8 +358,8 @@ public partial class Form1 : Form
 
         RefreshUi();
     }
-    
-    private void textBox_x_Leave(object sender, EventArgs e)
+
+    private void TextBox_x_Leave(object sender, EventArgs e)
     {
         if (int.TryParse(textBox_x.Text, out var softCamWidth))
         {
@@ -317,7 +370,7 @@ public partial class Form1 : Form
             textBox_x.Text = _settings.Width.ToString();
     }
 
-    private void textBox_y_Leave(object sender, EventArgs e)
+    private void TextBox_y_Leave(object sender, EventArgs e)
     {
         if (int.TryParse(textBox_y.Text, out var softCamHeight))
         {
@@ -342,7 +395,12 @@ public partial class Form1 : Form
 
         var cameraFormats = camera.Description.FrameFormats;
         foreach (var format in cameraFormats)
-            comboBox_camResolution.Items.Add($"{format.Width}x{format.Height} {format.Format} {format.Fps}fps");
+            comboBox_camResolution.Items.Add(string.Format(
+                FrameFormatPattern,
+                format.Width,
+                format.Height,
+                format.Format,
+                format.Fps));
 
         if (comboBox_camResolution.Items.Count > 0)
             comboBox_camResolution.SelectedIndex = 0;
@@ -368,7 +426,7 @@ public partial class Form1 : Form
         tabControl2.TabPages[0].Controls.Add(uiControl);
     }
 
-    private void comboBox_camResolution_SelectedIndexChanged(object sender, EventArgs e)
+    private void ComboBox_camResolution_SelectedIndexChanged(object sender, EventArgs e)
     {
         RefreshUi();
     }
@@ -386,7 +444,7 @@ public partial class Form1 : Form
 
     private static Mat? ApplyFilters(Mat? image, FilterSettings filters, int softCamWidth, int softCamHeight)
     {
-        if (image == null)
+        if (image == null || image.Empty())
             return null;
 
         if (filters.Grayscale)
@@ -395,29 +453,29 @@ public partial class Form1 : Form
             image = image.CvtColor(ColorConversionCodes.GRAY2RGB);
         }
 
-        var rotated = new Mat();
+        _rotated ??= new Mat();
         if (filters.Rotate != null)
-            Cv2.Rotate(image, rotated, (RotateFlags)filters.Rotate);
+            Cv2.Rotate(image, _rotated, (RotateFlags)filters.Rotate);
         else
-            rotated = image;
+            _rotated = image;
 
-        var resizedImage = ResizeFit(rotated, softCamWidth, softCamHeight);
-        if (resizedImage == null)
+        _resizedImage = ResizeFit(_rotated, softCamWidth, softCamHeight);
+        if (_resizedImage == null || image.Empty())
             return null;
 
         if (filters.FlipHorizontal)
-            resizedImage = resizedImage.Flip(FlipMode.Y);
+            _resizedImage = _resizedImage.Flip(FlipMode.Y);
 
         if (filters.FlipVertical)
-            resizedImage = resizedImage.Flip(FlipMode.X);
+            _resizedImage = _resizedImage.Flip(FlipMode.X);
 
-        return resizedImage;
+        return _resizedImage;
     }
 
     private static Mat? ResizeFit(Mat? image, int maxWidth, int maxHeight)
     {
-        if (image == null)
-            return image;
+        if (image == null || image.Empty())
+            return null;
 
         var width = image.Width;
         var height = image.Height;
@@ -436,29 +494,31 @@ public partial class Form1 : Form
             if (height > maxHeight)
                 height = maxHeight;
 
-            var result = new Mat();
-            Cv2.Resize(image, result, new Size(width, height), 0, 0, InterpolationFlags.Cubic);
+            _resizedImage ??= new Mat();
+            Cv2.Resize(image, _resizedImage, new Size(width, height), 0, 0, InterpolationFlags.Cubic);
 
-            var top = (maxHeight - result.Height) / 2;
-            var bottom = maxHeight - (result.Height + top);
-            var left = (maxWidth - result.Width) / 2;
-            var right = maxWidth - (result.Width + left);
+            var top = (maxHeight - _resizedImage.Height) / 2;
+            var bottom = maxHeight - (_resizedImage.Height + top);
+            var left = (maxWidth - _resizedImage.Width) / 2;
+            var right = maxWidth - (_resizedImage.Width + left);
             if (top == 0 && bottom == 0 && left == 0 && right == 0)
-                return result;
+                return _resizedImage;
 
-            Cv2.CopyMakeBorder(result, image, top, bottom, left, right, BorderTypes.Constant, Scalar.Gray);
-            result.Dispose();
+            _resizedImage2 ??= new Mat();
+            Cv2.CopyMakeBorder(_resizedImage, _resizedImage2, top, bottom, left, right, BorderTypes.Constant, Scalar.Gray);
+
+            return _resizedImage2;
         }
 
         return image;
     }
 
-    private static Bitmap? MatToBitmap(Mat? mat)
+    private static Bitmap? MatToBitmap(Mat? image)
     {
-        if (mat == null)
+        if (image == null || image.Empty())
             return null;
 
-        using (var ms = mat.ToMemoryStream())
+        using (var ms = image.ToMemoryStream())
         {
             return (Bitmap)Image.FromStream(ms);
         }

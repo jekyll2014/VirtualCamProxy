@@ -39,6 +39,7 @@ public class ScreenCamera : ICamera
     private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
     private readonly Stopwatch _fpsTimer = new();
+    private Mat? _frame = new Mat();
     private byte _frameCount;
     private double _fps = 15;
     private int _delay = 100;
@@ -58,7 +59,7 @@ public class ScreenCamera : ICamera
                      ?? throw new ArgumentException("Can not find camera", nameof(path));
 
         Fps = fps;
-        Description = new CameraDescription(CameraType.Screen, path, name, GetAllAvailableResolution());
+        Description = new CameraDescription(CameraType.Screen, path, name, GetAllAvailableResolution().ToArray());
         CurrentFps = Description.FrameFormats.FirstOrDefault()?.Fps ?? 15;
 
         _keepAliveTimer.Elapsed += CameraDisconnected;
@@ -66,7 +67,7 @@ public class ScreenCamera : ICamera
 
     public async Task<bool> GetImageData(int discoveryTimeout = 1000)
     {
-        Description.FrameFormats = GetAllAvailableResolution();
+        Description.FrameFormats = GetAllAvailableResolution().ToArray();
 
         return Description.FrameFormats.Any();
     }
@@ -160,7 +161,7 @@ public class ScreenCamera : ICamera
                     ImageCaptured(dstImage);
                 }
                 else
-                    await Task.Delay(10, _cancellationTokenSourceCameraGrabber.Token);
+                    await Task.Delay(10, CancellationToken.None);
             }
 
             srcImage.Dispose();
@@ -183,38 +184,37 @@ public class ScreenCamera : ICamera
         {
             lock (_getPictureThreadLock)
             {
-                var frame = BitmapToMap(image);
-                if (frame == null)
+                _frame = BitmapToMap(image);
+                if (_frame == null || _frame.Empty())
                     return;
 
-                CurrentFrameFormat ??= new FrameFormat(frame.Width, frame.Height);
+                CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
+                ImageCapturedEvent?.Invoke(this, _frame);
+            }
 
-                ImageCapturedEvent?.Invoke(this, frame);
-
-                if (!_fpsTimer.IsRunning)
+            if (!_fpsTimer.IsRunning)
+            {
+                _fpsTimer.Start();
+                _frameCount = 0;
+            }
+            else
+            {
+                _frameCount++;
+                if (_frameCount >= 100)
                 {
-                    _fpsTimer.Start();
+                    if (_fpsTimer.ElapsedMilliseconds > 0)
+                        CurrentFps = (double)_frameCount / ((double)_fpsTimer.ElapsedMilliseconds / (double)1000);
+
+                    _fpsTimer.Reset();
                     _frameCount = 0;
                 }
-                else
-                {
-                    _frameCount++;
-                    if (_frameCount >= 100)
-                    {
-                        if (_fpsTimer.ElapsedMilliseconds > 0)
-                            CurrentFps = (double)_frameCount / ((double)_fpsTimer.ElapsedMilliseconds / (double)1000);
+            }
 
-                        _fpsTimer.Reset();
-                        _frameCount = 0;
-                    }
-                }
-
-                _gcCounter++;
-                if (_gcCounter >= 10)
-                {
-                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
-                    _gcCounter = 0;
-                }
+            _gcCounter++;
+            if (_gcCounter >= 10)
+            {
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
+                _gcCounter = 0;
             }
         }
         catch
@@ -226,12 +226,12 @@ public class ScreenCamera : ICamera
     private static Mat BitmapToMap(Bitmap image)
     {
         if (image.PixelFormat != PixelFormat.Format24bppRgb)
-            image = BitmapTo24bpp(image);
+            image = BitmapTo24Bpp(image);
 
         return image.ToMat();
     }
 
-    public static Bitmap BitmapTo24bpp(Image image)
+    public static Bitmap BitmapTo24Bpp(Image image)
     {
         var bp = new Bitmap(image.Width, image.Height, PixelFormat.Format24bppRgb);
         using (var gr = Graphics.FromImage(bp))
@@ -250,7 +250,7 @@ public class ScreenCamera : ICamera
         if (!IsRunning)
             return;
 
-        lock (_getPictureThreadLock)
+        //lock (_getPictureThreadLock)
         {
             _keepAliveTimer.Stop();
 
@@ -270,21 +270,23 @@ public class ScreenCamera : ICamera
     {
         if (IsRunning)
         {
-            Mat? frame = null;
             ImageCapturedEvent += CameraImageCapturedEvent;
             var watch = new Stopwatch();
             watch.Restart();
-            while (IsRunning && frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
-                await Task.Delay(10, token);
+            while (IsRunning
+                   && (_frame == null || _frame.Empty())
+                   && !token.IsCancellationRequested
+                   && watch.ElapsedMilliseconds < FrameTimeout)
+                await Task.Delay(10, CancellationToken.None);
 
             ImageCapturedEvent -= CameraImageCapturedEvent;
             watch.Stop();
 
-            return frame;
+            return _frame;
 
             void CameraImageCapturedEvent(ICamera camera, Mat image)
             {
-                frame = image?.Clone();
+                _frame = image?.Clone();
             }
         }
 
@@ -311,7 +313,7 @@ public class ScreenCamera : ICamera
         {
             var image = await GrabFrame(token);
             if (image == null)
-                await Task.Delay(10, token);
+                await Task.Delay(10, CancellationToken.None);
             else
                 yield return image;
         }

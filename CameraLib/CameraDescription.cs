@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace CameraLib
+﻿namespace CameraLib
 {
     public class CameraDescription
     {
@@ -11,14 +8,14 @@ namespace CameraLib
 
         public string Name { get; set; }
 
-        public IEnumerable<FrameFormat> FrameFormats { get; set; }
+        public FrameFormat[] FrameFormats { get; set; }
 
-        public CameraDescription(CameraType type, string path, string name = "", IEnumerable<FrameFormat>? frameFormats = null)
+        public CameraDescription(CameraType type, string path, string name = "", FrameFormat[]? frameFormats = null)
         {
             Type = type;
             Path = path;
             Name = name;
-            FrameFormats = frameFormats ?? Array.Empty<FrameFormat>();
+            FrameFormats = frameFormats ?? [];
         }
     }
 }

@@ -20,11 +20,11 @@ namespace CameraLib.MJPEG
 {
     public class MjpegCamera : ICamera
     {
-        public AuthType AuthenticationType { get; }
-        public string Login { get; }
-        public string Password { get; }
+        public AuthType AuthenticationType { get; private set; }
+        public string Login { get; private set; }
+        public string Password { get; private set; }
         public CameraDescription Description { get; set; }
-        public bool IsRunning { get; set; } = false;
+        public bool IsRunning { get; private set; } = false;
         public FrameFormat? CurrentFrameFormat { get; private set; }
         public double CurrentFps { get; private set; }
         public int FrameTimeout { get; set; } = 30000;
@@ -38,14 +38,16 @@ namespace CameraLib.MJPEG
 
         private CancellationTokenSource? _cancellationTokenSource;
         private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
-        private readonly object _getPictureThreadLock = new object();
+        private readonly object _getPictureThreadLock = new();
         private Task? _imageGrabber;
         private readonly Stopwatch _fpsTimer = new();
-        private volatile byte _frameCount;
+        private Mat? _frame = new Mat();
+        private byte _frameCount;
         private readonly System.Timers.Timer _keepAliveTimer = new();
         private int _width = 0;
         private int _height = 0;
         private string _format = string.Empty;
+        private int _gcCounter = 0;
         private bool _disposedValue;
 
         public MjpegCamera(string path,
@@ -116,15 +118,16 @@ namespace CameraLib.MJPEG
             return [];
         }
 
-        private static async Task<bool> PingAddress(string host, int pingTimeout = 3000)
+        private static async Task<bool> PingAddress(string host, int pingTimeout = 5000)
         {
             if (!IPAddress.TryParse(host, out var destIp))
             {
                 var h = await Dns.GetHostEntryAsync(host).ConfigureAwait(false);
-                if (h.AddressList.Any())
-                    host = h.AddressList.First().ToString();
+                if (h.AddressList.Length > 0)
+                    host = h.AddressList[0].ToString();
 
-                return IPAddress.TryParse(host, out destIp);
+                if (!IPAddress.TryParse(host, out destIp))
+                    return false;
             }
 
             PingReply pingResultTask;
@@ -150,8 +153,8 @@ namespace CameraLib.MJPEG
             _cancellationTokenSourceCameraGrabber?.Dispose();
             _cancellationTokenSourceCameraGrabber = new CancellationTokenSource();
 
-            _frameCount = 0;
             _fpsTimer.Reset();
+            _frameCount = 0;
             _keepAliveTimer.Interval = FrameTimeout;
             _keepAliveTimer.Start();
 
@@ -183,9 +186,8 @@ namespace CameraLib.MJPEG
             if (!IsRunning)
                 return;
 
-            lock (_getPictureThreadLock)
+            //lock (_getPictureThreadLock)
             {
-                IsRunning = false;
                 _keepAliveTimer.Stop();
 
                 _cancellationTokenSourceCameraGrabber?.Cancel();
@@ -199,10 +201,14 @@ namespace CameraLib.MJPEG
                 }
 
                 if (cancellation)
+                {
+                    _cancellationTokenSourceCameraGrabber?.Cancel();
                     _cancellationTokenSource?.Cancel();
+                }
 
                 CurrentFrameFormat = null;
                 _fpsTimer.Reset();
+                IsRunning = false;
             }
         }
 
@@ -210,44 +216,35 @@ namespace CameraLib.MJPEG
         {
             if (IsRunning)
             {
-                Mat? frame = null;
                 ImageCapturedEvent += CameraImageCapturedEvent;
                 var watch = new Stopwatch();
                 watch.Restart();
-                while (IsRunning && frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
-                    await Task.Delay(10, token);
+                while (IsRunning
+                       && (_frame == null || _frame.Empty())
+                       && !token.IsCancellationRequested
+                       && watch.ElapsedMilliseconds < FrameTimeout)
+                    await Task.Delay(10, CancellationToken.None);
 
                 ImageCapturedEvent -= CameraImageCapturedEvent;
                 watch.Stop();
 
-                return frame;
+                return _frame;
 
                 void CameraImageCapturedEvent(ICamera camera, Mat image)
                 {
-                    frame = image?.Clone();
+                    _frame = image;
                 }
             }
 
-            Mat? image = null;
             await Task.Run(async () =>
             {
                 if (await Start(0, 0, string.Empty, token))
-                {
-                    image = await GrabFrame(token);
-                    if (image != null)
-                    {
-                        CurrentFrameFormat ??= new FrameFormat(image.Width, image.Height);
-                        if (!Description.FrameFormats.Any()
-                            || (Description.FrameFormats.Count() == 1
-                                && Description.FrameFormats.First().Width == 0))
-                            Description.FrameFormats = new[] { new FrameFormat(image.Width, image.Height) };
-                    }
-                }
+                    _frame = await GrabFrame(token);
 
                 Stop();
             }, token);
 
-            return image;
+            return _frame;
         }
 
         public async IAsyncEnumerable<Mat> GrabFrames([EnumeratorCancellation] CancellationToken token)
@@ -256,7 +253,7 @@ namespace CameraLib.MJPEG
             {
                 var image = await GrabFrame(token);
                 if (image == null)
-                    await Task.Delay(10, token);
+                    await Task.Delay(10, CancellationToken.None);
                 else
                     yield return image;
             }
@@ -285,20 +282,20 @@ namespace CameraLib.MJPEG
                         "Basic",
                         Convert.ToBase64String(Encoding.ASCII.GetBytes($"{login}:{password}")));
 
-                await using (var stream = await httpClient.GetStreamAsync(url, token).ConfigureAwait(false))
+                IsRunning = true;
+                try
                 {
-                    var streamBuffer = new byte[chunkMaxSize];      // Stream chunk read
-                    var frameBuffer = new byte[frameBufferSize];    // Frame buffer
-
-                    var frameIdx = 0;       // Last written byte location in the frame buffer
-                    var inPicture = false;  // Are we currently parsing a picture ?
-                    byte current = 0x00;    // The last byte read
-                    byte previous = 0x00;   // The byte before
-
-                    // Continuously pump the stream. The cancellationtoken is used to get out of there
-                    IsRunning = true;
-                    try
+                    await using (var stream = await httpClient.GetStreamAsync(url, token).ConfigureAwait(false))
                     {
+                        var streamBuffer = new byte[chunkMaxSize];      // Stream chunk read
+                        var frameBuffer = new byte[frameBufferSize];    // Frame buffer
+
+                        var frameIdx = 0;       // Last written byte location in the frame buffer
+                        var inPicture = false;  // Are we currently parsing a picture ?
+                        byte current = 0x00;    // The last byte read
+                        byte previous = 0x00;   // The byte before
+
+                        // Continuously pump the stream. The cancellationtoken is used to get out of there
                         while (!token.IsCancellationRequested)
                         {
                             var streamLength = await stream.ReadAsync(streamBuffer.AsMemory(0, chunkMaxSize), token)
@@ -307,14 +304,14 @@ namespace CameraLib.MJPEG
                             ParseStreamBuffer(frameBuffer, ref frameIdx, streamLength, streamBuffer, ref inPicture,
                                 ref previous, ref current, token);
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Stop();
-                        Console.WriteLine(ex);
-                    }
 
-                    IsRunning = false;
+                        IsRunning = false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Stop();
+                    Console.WriteLine(ex);
                 }
             }
         }
@@ -337,7 +334,7 @@ namespace CameraLib.MJPEG
         }
 
         // While we are looking for a picture, look for a FFD8 (end of JPEG) sequence.
-        private void SearchPicture(byte[] frameBuffer, ref int frameIdx, ref int streamLength, byte[] streamBuffer, ref int idx, ref bool inPicture, ref byte previous, ref byte current, CancellationToken token)
+        private static void SearchPicture(byte[] frameBuffer, ref int frameIdx, ref int streamLength, byte[] streamBuffer, ref int idx, ref bool inPicture, ref byte previous, ref byte current, CancellationToken token)
         {
             do
             {
@@ -379,35 +376,47 @@ namespace CameraLib.MJPEG
                     {
                         try
                         {
-                            var frame = Cv2.ImDecode(frameBuffer, ImreadModes.Color);
-                            CurrentFrameFormat ??= new FrameFormat(frame.Width, frame.Height);
-                            ImageCapturedEvent?.Invoke(this, frame);
+                            _frame ??= new Mat();
+                            _frame = Cv2.ImDecode(frameBuffer, ImreadModes.Color);
+                            CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
+                            if (!Description.FrameFormats.Any()
+                                || (Description.FrameFormats.Count() == 1
+                                    && Description.FrameFormats.First().Width == 0))
+                                Description.FrameFormats = new[] { new FrameFormat(_frame.Width, _frame.Height) };
 
-                            if (!_fpsTimer.IsRunning)
-                            {
-                                _fpsTimer.Start();
-                                _frameCount = 0;
-                            }
-                            else
-                            {
-                                _frameCount++;
-                                if (_frameCount >= 100)
-                                {
-                                    if (_fpsTimer.ElapsedMilliseconds > 0)
-                                        CurrentFps = (double)_frameCount / ((double)_fpsTimer.ElapsedMilliseconds / (double)1000);
-
-                                    _fpsTimer.Reset();
-                                    _frameCount = 0;
-                                }
-                            }
+                            ImageCapturedEvent?.Invoke(this, _frame);
                         }
                         catch
                         {
-                            // We dont care about badly decoded pictures
-                            GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
+                            // We don't care about badly decoded pictures
+                            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
                         }
                     }
 
+                    if (!_fpsTimer.IsRunning)
+                    {
+                        _fpsTimer.Start();
+                        _frameCount = 0;
+                    }
+                    else
+                    {
+                        _frameCount++;
+                        if (_frameCount >= 100)
+                        {
+                            if (_fpsTimer.ElapsedMilliseconds > 0)
+                                CurrentFps = (double)_frameCount / ((double)_fpsTimer.ElapsedMilliseconds / (double)1000);
+
+                            _fpsTimer.Reset();
+                            _frameCount = 0;
+                        }
+                    }
+
+                    _gcCounter++;
+                    if (_gcCounter >= 100)
+                    {
+                        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
+                        _gcCounter = 0;
+                    }
                     inPicture = false;
 
                     return;
@@ -471,6 +480,7 @@ namespace CameraLib.MJPEG
                     _keepAliveTimer.Dispose();
                     _cancellationTokenSource?.Dispose();
                     _cancellationTokenSourceCameraGrabber?.Dispose();
+                    _frame?.Dispose();
                 }
 
                 _disposedValue = true;

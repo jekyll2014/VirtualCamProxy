@@ -1,4 +1,6 @@
-﻿using CameraLib;
+﻿using CameraExtension;
+
+using CameraLib;
 using CameraLib.FlashCap;
 using CameraLib.IP;
 using CameraLib.MJPEG;
@@ -6,24 +8,20 @@ using CameraLib.USB;
 
 using OpenCvSharp;
 
-using System.Collections.Concurrent;
-using CameraExtension;
-
 namespace VirtualCamProxy;
 public class CameraHubService : IDisposable
 {
-    private readonly CameraSettings _cameraSettings;
-    private readonly int _maxBuffer;
-    public readonly List<ICamera> Cameras = [];
-    public readonly ConcurrentQueue<Mat> ImageQueue = new();
-    private bool disposedValue;
+    public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
 
+    public readonly List<ICamera> Cameras = [];
     public ICamera? CurrentCamera { get; private set; }
+
+    private readonly CameraSettings _cameraSettings;
+    private bool disposedValue;
 
     public CameraHubService(CameraSettings settings)
     {
         _cameraSettings = settings;
-        _maxBuffer = _cameraSettings.MaxFrameBuffer;
     }
 
     public async Task RefreshCameraCollection()
@@ -99,13 +97,6 @@ public class CameraHubService : IDisposable
             }
         });
 
-        List<CameraDescription> ipCameras = [];
-        if (_cameraSettings.AutoSearchIp)
-        {
-            Console.WriteLine("Detecting IP cameras...");
-            ipCameras = await IpCamera.DiscoverOnvifCamerasAsync(_cameraSettings.DiscoveryTimeOut);
-        }
-
         if (_cameraSettings.AutoSearchUsb)
         {
             Console.WriteLine("Autodetecting USB cameras...");
@@ -151,6 +142,7 @@ public class CameraHubService : IDisposable
         if (_cameraSettings.AutoSearchIp)
         {
             Console.WriteLine("Autodetecting IP cameras...");
+            var ipCameras = await IpCamera.DiscoverOnvifCamerasAsync(_cameraSettings.DiscoveryTimeOut);
             foreach (var c in ipCameras)
                 Console.WriteLine($"IP-Camera: {c.Name} - [{c.Path}]");
 
@@ -251,21 +243,13 @@ public class CameraHubService : IDisposable
     public ICamera? GetCamera(string cameraId)
     {
         var camera = Cameras.FirstOrDefault(n => n.Description.Path == cameraId);
-        if (camera == null)
-            return null;
-
-        return camera;
+        return camera ?? null;
     }
 
     private void GetImageFromCameraStream(ICamera camera, Mat image)
     {
-        if (ImageQueue.Count >= _maxBuffer)
-        {
-            if (ImageQueue.TryDequeue(out var frame))
-                frame?.Dispose();
-        }
-
-        ImageQueue.Enqueue(image);
+        if (!image.Empty())
+            ImageCapturedEvent?.Invoke(CurrentCamera, image);
     }
 
     protected virtual void Dispose(bool disposing)
@@ -274,17 +258,13 @@ public class CameraHubService : IDisposable
         {
             if (disposing)
             {
-                // TODO: dispose managed state (managed objects)
                 UnHookCamera();
                 CurrentCamera?.Dispose();
                 foreach (var cam in Cameras)
                     cam.Dispose();
-            }
 
-            // TODO: free unmanaged resources (unmanaged objects) and override finalizer
-            // TODO: set large fields to null
-            while (ImageQueue.TryDequeue(out var frame))
-                frame?.Dispose();
+                //Image?.Dispose();
+            }
 
             disposedValue = true;
         }

@@ -158,7 +158,7 @@
             comboBox_camResolution.Name = "comboBox_camResolution";
             comboBox_camResolution.Size = new Size(272, 23);
             comboBox_camResolution.TabIndex = 1;
-            comboBox_camResolution.SelectedIndexChanged += comboBox_camResolution_SelectedIndexChanged;
+            comboBox_camResolution.SelectedIndexChanged += ComboBox_camResolution_SelectedIndexChanged;
             // 
             // button_camStop
             // 
@@ -249,7 +249,7 @@
             textBox_x.Size = new Size(44, 23);
             textBox_x.TabIndex = 7;
             textBox_x.Text = "1920";
-            textBox_x.Leave += textBox_x_Leave;
+            textBox_x.Leave += TextBox_x_Leave;
             // 
             // label2
             // 
@@ -277,7 +277,7 @@
             textBox_y.Size = new Size(44, 23);
             textBox_y.TabIndex = 7;
             textBox_y.Text = "1080";
-            textBox_y.Leave += textBox_y_Leave;
+            textBox_y.Leave += TextBox_y_Leave;
             // 
             // label_currentSource
             // 

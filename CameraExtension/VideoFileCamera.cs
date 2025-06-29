@@ -27,6 +27,7 @@ public class VideoFileCamera : ICamera
     private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
     private readonly Stopwatch _fpsTimer = new();
+    private Mat? _frame = new Mat();
     private byte _frameCount;
     private readonly List<string> _fileNames = [];
     private int _fileIndex = 0;
@@ -46,7 +47,7 @@ public class VideoFileCamera : ICamera
         Description = new CameraDescription(CameraType.VideoFile,
             path,
             name,
-            GetFileResolution(path));
+            GetFileResolution(path).ToArray());
         CurrentFps = 0;
 
         _keepAliveTimer.Elapsed += CameraDisconnected;
@@ -57,7 +58,7 @@ public class VideoFileCamera : ICamera
         if (_videoFile == null)
             return false;
 
-        Description.FrameFormats = GetFileResolution(_videoFile);
+        Description.FrameFormats = GetFileResolution(_videoFile).ToArray();
 
         return Description.FrameFormats.Any();
     }
@@ -85,7 +86,7 @@ public class VideoFileCamera : ICamera
             };
 
             Description.Path = file;
-            Description.FrameFormats = GetFileResolution(_videoFile);
+            Description.FrameFormats = GetFileResolution(_videoFile).ToArray();
             CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
             CurrentFps = CurrentFrameFormat?.Fps ?? 0;
             _format = CurrentFrameFormat?.Format ?? string.Empty;
@@ -117,7 +118,7 @@ public class VideoFileCamera : ICamera
         };
 
         Description.Path = file;
-        Description.FrameFormats = GetFileResolution(_videoFile);
+        Description.FrameFormats = GetFileResolution(_videoFile).ToArray();
         CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
         CurrentFps = CurrentFrameFormat?.Fps ?? 0;
         _format = CurrentFrameFormat?.Format ?? string.Empty;
@@ -150,7 +151,6 @@ public class VideoFileCamera : ICamera
 
     private static List<FrameFormat> GetFileResolution(string path)
     {
-
         VideoCapture? videoFile = null;
         if (!string.IsNullOrEmpty(path))
         {
@@ -158,7 +158,10 @@ public class VideoFileCamera : ICamera
             {
                 videoFile = new VideoCapture(path);
             }
-            catch { }
+            catch
+            {
+                // Ignore if the file is not readable
+            }
         }
 
         return GetFileResolution(videoFile);
@@ -205,7 +208,7 @@ public class VideoFileCamera : ICamera
                         await _cancellationTokenSourceCameraGrabber.CancelAsync();
                 }
                 else
-                    await Task.Delay(10, _cancellationTokenSourceCameraGrabber.Token);
+                    await Task.Delay(10, CancellationToken.None);
             }
 
             Stop(true);
@@ -225,38 +228,36 @@ public class VideoFileCamera : ICamera
         {
             lock (_getPictureThreadLock)
             {
-                var frame = new Mat();
-                if (!(_videoFile?.Retrieve(frame) ?? false) || frame == null)
+                if (!(_videoFile?.Retrieve(_frame) ?? false) || (_frame == null || _frame.Empty()))
                     return;
 
-                CurrentFrameFormat ??= new FrameFormat(frame.Width, frame.Height);
+                CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
+                ImageCapturedEvent?.Invoke(this, _frame);
+            }
 
-                ImageCapturedEvent?.Invoke(this, frame);
-
-                if (!_fpsTimer.IsRunning)
+            if (!_fpsTimer.IsRunning)
+            {
+                _fpsTimer.Start();
+                _frameCount = 0;
+            }
+            else
+            {
+                _frameCount++;
+                if (_frameCount >= 100)
                 {
-                    _fpsTimer.Start();
+                    if (_fpsTimer.ElapsedMilliseconds > 0)
+                        CurrentFps = (double)_frameCount / ((double)_fpsTimer.ElapsedMilliseconds / (double)1000);
+
+                    _fpsTimer.Reset();
                     _frameCount = 0;
                 }
-                else
-                {
-                    _frameCount++;
-                    if (_frameCount >= 100)
-                    {
-                        if (_fpsTimer.ElapsedMilliseconds > 0)
-                            CurrentFps = (double)_frameCount / ((double)_fpsTimer.ElapsedMilliseconds / (double)1000);
+            }
 
-                        _fpsTimer.Reset();
-                        _frameCount = 0;
-                    }
-                }
-
-                _gcCounter++;
-                if (_gcCounter >= 10)
-                {
-                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
-                    _gcCounter = 0;
-                }
+            _gcCounter++;
+            if (_gcCounter >= 10)
+            {
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
+                _gcCounter = 0;
             }
         }
         catch
@@ -275,9 +276,24 @@ public class VideoFileCamera : ICamera
         if (!IsRunning)
             return;
 
-        lock (_getPictureThreadLock)
+        //lock (_getPictureThreadLock)
         {
             _keepAliveTimer.Stop();
+
+            if (_videoFile != null)
+            {
+                _cancellationTokenSourceCameraGrabber?.Cancel();
+                try
+                {
+                    _captureTask?.Wait(5000);
+                    _videoFile?.Release();
+                    _videoFile?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error releasing camera: {ex}");
+                }
+            }
 
             if (cancellation)
             {
@@ -295,44 +311,56 @@ public class VideoFileCamera : ICamera
     {
         if (IsRunning)
         {
-            Mat? frame = null;
             ImageCapturedEvent += CameraImageCapturedEvent;
             var watch = new Stopwatch();
             watch.Restart();
-            while (IsRunning && frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
-                await Task.Delay(10, token);
+            while (IsRunning && _frame == null && !token.IsCancellationRequested && watch.ElapsedMilliseconds < FrameTimeout)
+                await Task.Delay(10, CancellationToken.None);
 
             ImageCapturedEvent -= CameraImageCapturedEvent;
             watch.Stop();
 
-            return frame;
+            return _frame;
 
             void CameraImageCapturedEvent(ICamera camera, Mat image)
             {
-                frame = image?.Clone();
+                _frame = image;
             }
         }
 
-        if (_videoFile == null)
-            SetFile(_fileNames);
-
-        Mat? image = null;
-        if (_videoFile?.Grab() ?? false)
+        await Task.Run(async () =>
         {
-            image = new Mat();
-            _videoFile?.Retrieve(image);
-        }
-        else if (RepeatFile)
-        {
-            SetNextFile(true);
-            if (_videoFile?.Grab() ?? false)
+            try
             {
-                image = new Mat();
-                _videoFile?.Retrieve(image);
-            }
-        }
 
-        return image;
+                if (_videoFile == null)
+                    SetFile(_fileNames);
+
+                if (_videoFile?.Grab() ?? false)
+                {
+                    _frame ??= new Mat();
+                    _videoFile?.Retrieve(_frame);
+                }
+                else if (RepeatFile)
+                {
+                    SetNextFile(true);
+                    if (_videoFile?.Grab() ?? false)
+                    {
+                        _frame ??= new Mat();
+                        _videoFile?.Retrieve(_frame);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
+
+            _videoFile?.Release();
+            _videoFile?.Dispose();
+        }, token);
+
+        return _frame;
     }
 
     public async IAsyncEnumerable<Mat> GrabFrames([EnumeratorCancellation] CancellationToken token)
@@ -341,7 +369,7 @@ public class VideoFileCamera : ICamera
         {
             var image = await GrabFrame(token);
             if (image == null)
-                await Task.Delay(10, token);
+                await Task.Delay(10, CancellationToken.None);
             else
                 yield return image;
         }
