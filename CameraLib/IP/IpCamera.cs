@@ -209,6 +209,7 @@ namespace CameraLib.IP
             _width = width;
             _height = height;
             _format = format;
+            CurrentFrameFormat = new FrameFormat(_width, _height, "MJPEG");
 
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
@@ -251,10 +252,7 @@ namespace CameraLib.IP
         {
             try
             {
-                var t = Task.Run(() => new VideoCapture(Description.Path), token);
-                await t.WaitAsync(TimeSpan.FromMilliseconds(FrameTimeout), token);
-
-                return t.Result;
+                return await Task.Run(() => new VideoCapture(Description.Path), token);
             }
             catch (Exception ex)
             {
@@ -277,7 +275,7 @@ namespace CameraLib.IP
                     if (!(_captureDevice?.Retrieve(_frame) ?? false) || _frame.Empty())
                         return;
 
-                    CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
+                    //CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
                     if (!Description.FrameFormats.Any()
                         || (Description.FrameFormats.Count() == 1
                             && Description.FrameFormats.First().Width == 0))
@@ -327,38 +325,35 @@ namespace CameraLib.IP
             if (!IsRunning)
                 return;
 
-            //lock (_getPictureThreadLock)
+            _keepAliveTimer.Stop();
+
+            if (_captureDevice != null)
             {
-                _keepAliveTimer.Stop();
-
-                if (_captureDevice != null)
+                _cancellationTokenSourceCameraGrabber?.Cancel();
+                try
                 {
-                    _cancellationTokenSourceCameraGrabber?.Cancel();
-                    try
-                    {
-                        _captureTask?.Wait(5000);
-                        _captureDevice?.Release();
-                        _captureDevice?.Dispose();
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error releasing camera: {ex}");
-                    }
+                    _captureTask?.Wait(5000);
+                    _captureDevice?.Release();
+                    _captureDevice?.Dispose();
                 }
-
-                if (cancellation)
+                catch (Exception ex)
                 {
-                    _cancellationTokenSourceCameraGrabber?.Cancel();
-                    _cancellationTokenSource?.Cancel();
+                    Console.WriteLine($"Error releasing camera: {ex}");
                 }
-
-                CurrentFrameFormat = null;
-                _fpsTimer.Reset();
-                IsRunning = false;
             }
+
+            if (cancellation)
+            {
+                _cancellationTokenSourceCameraGrabber?.Cancel();
+                _cancellationTokenSource?.Cancel();
+            }
+
+            CurrentFrameFormat = null;
+            _fpsTimer.Reset();
+            IsRunning = false;
         }
 
-        public async Task<Mat?> GrabFrame(CancellationToken token)
+        public async Task<Mat?> GrabFrame(CancellationToken token, int width = 0, int height = 0, string format = "")
         {
             if (IsRunning)
             {

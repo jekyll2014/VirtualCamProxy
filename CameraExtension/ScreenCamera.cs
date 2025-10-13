@@ -266,7 +266,7 @@ public class ScreenCamera : ICamera
         }
     }
 
-    public async Task<Mat?> GrabFrame(CancellationToken token)
+    public async Task<Mat?> GrabFrame(CancellationToken token, int width = 0, int height = 0, string format = "")
     {
         if (IsRunning)
         {

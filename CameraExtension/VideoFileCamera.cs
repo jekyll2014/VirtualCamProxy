@@ -32,6 +32,7 @@ public class VideoFileCamera : ICamera
     private readonly List<string> _fileNames = [];
     private int _fileIndex = 0;
     private VideoCapture? _videoFile;
+    private int _stepToNextFile = 0;
     private int _delay = 100;
     private readonly Timer _keepAliveTimer = new();
     private string _format = string.Empty;
@@ -94,8 +95,16 @@ public class VideoFileCamera : ICamera
         }
     }
 
+    public void StepToNextFile()
+    {
+        Interlocked.Increment(ref _stepToNextFile);
+    }
+
     private bool SetNextFile(bool repeat)
     {
+        if (_stepToNextFile > 0)
+            Interlocked.Decrement(ref _stepToNextFile);
+
         _videoFile?.Dispose();
 
         if (_fileNames.Count == 0)
@@ -202,7 +211,7 @@ public class VideoFileCamera : ICamera
                 if (now >= nextFrameTime)
                 {
                     nextFrameTime += _delay;
-                    if (_videoFile?.Grab() ?? false)
+                    if ((_videoFile?.Grab() ?? false) && _stepToNextFile <= 0)
                         CaptureImage();
                     else if (!SetNextFile(RepeatFile))
                         await _cancellationTokenSourceCameraGrabber.CancelAsync();
@@ -307,7 +316,7 @@ public class VideoFileCamera : ICamera
         }
     }
 
-    public async Task<Mat?> GrabFrame(CancellationToken token)
+    public async Task<Mat?> GrabFrame(CancellationToken token, int width = 0, int height = 0, string format = "")
     {
         if (IsRunning)
         {

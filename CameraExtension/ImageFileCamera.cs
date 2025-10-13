@@ -22,7 +22,6 @@ public class ImageFileCamera : ICamera
     private CancellationTokenSource? _cancellationTokenSource;
     private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
     private const string CameraName = "Image file(s)";
-    private readonly object _getPictureThreadLock = new();
     private Task? _captureTask;
     private readonly Stopwatch _fpsTimer = new();
     private Mat? _frame = new Mat();
@@ -30,6 +29,7 @@ public class ImageFileCamera : ICamera
     private readonly List<string> _fileNames = [];
     private int _fileIndex = 0;
     private string _imageFile = string.Empty;
+    private int _stepToNextFile = 0;
     public int Delay = 1000;
     private int _gcCounter = 0;
     private bool _disposedValue;
@@ -81,6 +81,11 @@ public class ImageFileCamera : ICamera
             CurrentFrameFormat = Description.FrameFormats.FirstOrDefault();
             CurrentFps = CurrentFrameFormat?.Fps ?? 0;
         }
+    }
+
+    public void StepToNextFile()
+    {
+        Interlocked.Increment(ref _stepToNextFile);
     }
 
     private bool SetNextFile(bool repeat)
@@ -159,13 +164,16 @@ public class ImageFileCamera : ICamera
         _captureTask?.Dispose();
         _captureTask = Task.Run(async () =>
         {
-            var nextFrameTime = new DateTimeOffset(DateTime.Now).ToUnixTimeMilliseconds();
+            var nextFrameTime = DateTime.Now;
+            _stepToNextFile = 0;
             while (!_cancellationTokenSourceCameraGrabber.Token.IsCancellationRequested)
             {
-                var now = new DateTimeOffset(DateTime.Now).ToUnixTimeMilliseconds();
-                if (now >= nextFrameTime)
+                if (DateTime.Now >= nextFrameTime || _stepToNextFile > 0)
                 {
-                    nextFrameTime += Delay;
+                    if (_stepToNextFile > 0)
+                        Interlocked.Decrement(ref _stepToNextFile);
+
+                    nextFrameTime = DateTime.Now.AddMilliseconds(Delay);
                     CaptureImage(_imageFile);
                     if (!SetNextFile(RepeatFile))
                         await _cancellationTokenSourceCameraGrabber.CancelAsync();
@@ -184,28 +192,22 @@ public class ImageFileCamera : ICamera
 
     private void CaptureImage(string file)
     {
-        if (Monitor.IsEntered(_getPictureThreadLock) || string.IsNullOrEmpty(file))
-            return;
-
         try
         {
-            lock (_getPictureThreadLock)
+            try
             {
-                try
-                {
-                    _frame = Cv2.ImRead(file, ImreadModes.Color);
-                }
-                catch
-                {
-                    // Ignore if the file is not an image
-                }
-
-                if (_frame == null)
-                    return;
-
-                CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
-                ImageCapturedEvent?.Invoke(this, _frame);
+                _frame = Cv2.ImRead(file, ImreadModes.Color);
             }
+            catch
+            {
+                // Ignore if the file is not an image
+            }
+
+            if (_frame == null)
+                return;
+
+            CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
+            ImageCapturedEvent?.Invoke(this, _frame);
 
             if (!_fpsTimer.IsRunning)
             {
@@ -262,7 +264,7 @@ public class ImageFileCamera : ICamera
         }
     }
 
-    public async Task<Mat?> GrabFrame(CancellationToken token)
+    public async Task<Mat?> GrabFrame(CancellationToken token, int width = 0, int height = 0, string format = "")
     {
         if (IsRunning)
         {

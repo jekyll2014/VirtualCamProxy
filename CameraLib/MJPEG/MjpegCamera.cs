@@ -147,6 +147,7 @@ namespace CameraLib.MJPEG
             _width = width;
             _height = height;
             _format = format;
+            CurrentFrameFormat = new FrameFormat(_width, _height, "MJPEG");
 
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
@@ -186,33 +187,30 @@ namespace CameraLib.MJPEG
             if (!IsRunning)
                 return;
 
-            //lock (_getPictureThreadLock)
+            _keepAliveTimer.Stop();
+
+            _cancellationTokenSourceCameraGrabber?.Cancel();
+            try
             {
-                _keepAliveTimer.Stop();
-
-                _cancellationTokenSourceCameraGrabber?.Cancel();
-                try
-                {
-                    _imageGrabber?.Wait(5000);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Camera Stop() failed: {ex}");
-                }
-
-                if (cancellation)
-                {
-                    _cancellationTokenSourceCameraGrabber?.Cancel();
-                    _cancellationTokenSource?.Cancel();
-                }
-
-                CurrentFrameFormat = null;
-                _fpsTimer.Reset();
-                IsRunning = false;
+                _imageGrabber?.Wait(5000);
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Camera Stop() failed: {ex}");
+            }
+
+            if (cancellation)
+            {
+                _cancellationTokenSourceCameraGrabber?.Cancel();
+                _cancellationTokenSource?.Cancel();
+            }
+
+            CurrentFrameFormat = null;
+            _fpsTimer.Reset();
+            IsRunning = false;
         }
 
-        public async Task<Mat?> GrabFrame(CancellationToken token)
+        public async Task<Mat?> GrabFrame(CancellationToken token, int width = 0, int height = 0, string format = "")
         {
             if (IsRunning)
             {
@@ -295,7 +293,7 @@ namespace CameraLib.MJPEG
                         byte current = 0x00;    // The last byte read
                         byte previous = 0x00;   // The byte before
 
-                        // Continuously pump the stream. The cancellationtoken is used to get out of there
+                        // Continuously pump the stream. The cancellation token is used to get out of there
                         while (!token.IsCancellationRequested)
                         {
                             var streamLength = await stream.ReadAsync(streamBuffer.AsMemory(0, chunkMaxSize), token)
@@ -378,7 +376,7 @@ namespace CameraLib.MJPEG
                         {
                             _frame ??= new Mat();
                             _frame = Cv2.ImDecode(frameBuffer, ImreadModes.Color);
-                            CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
+                            //CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
                             if (!Description.FrameFormats.Any()
                                 || (Description.FrameFormats.Count() == 1
                                     && Description.FrameFormats.First().Width == 0))

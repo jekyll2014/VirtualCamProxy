@@ -349,7 +349,8 @@ public partial class Form1 : Form
 
         DisableUi();
 
-        var image = await camera.GrabFrame(CancellationToken.None);
+        var frameFormat = camera.Description.FrameFormats.ToArray()[comboBox_camResolution.SelectedIndex];
+        var image = await camera.GrabFrame(CancellationToken.None, frameFormat.Width, frameFormat.Height, frameFormat.Format);
         if (image != null)
         {
             var bitmap = MatToBitmap(image);

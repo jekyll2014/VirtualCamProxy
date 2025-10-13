@@ -24,7 +24,7 @@ namespace CameraLib
         public List<CameraDescription> DiscoverCameras(int discoveryTimeout);
         public Task<bool> Start(int width, int height, string format, CancellationToken token);
         public void Stop();
-        public Task<Mat?> GrabFrame(CancellationToken token);
+        public Task<Mat?> GrabFrame(CancellationToken token, int width, int height, string format);
         public IAsyncEnumerable<Mat> GrabFrames(CancellationToken token);
         public FrameFormat GetNearestFormat(int width, int height, string format);
     }

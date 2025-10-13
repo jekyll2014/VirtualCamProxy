@@ -15,6 +15,7 @@ namespace CameraLib.USB
 {
     public class UsbCamera : ICamera
     {
+        public VideoCapture? CaptureDevice => _captureDevice;
         public CameraDescription Description { get; set; }
         public bool IsRunning { get; private set; } = false;
         public FrameFormat? CurrentFrameFormat { get; private set; }
@@ -105,7 +106,8 @@ namespace CameraLib.USB
                 mFilterGraph2.AddSourceFilterForMoniker(usbCamera.Mon, null, usbCamera.Name, out var sourceFilter);
 
                 var pRaw2 = DsFindPin.ByCategory(sourceFilter, PinCategory.Capture, 0);
-
+                if (pRaw2 == null)
+                    return availableResolutions;
 
                 var videoInfoHeader = new VideoInfoHeader();
                 pRaw2.EnumMediaTypes(out var mediaTypeEnum);
@@ -186,6 +188,7 @@ namespace CameraLib.USB
             _width = width;
             _height = height;
             _format = format;
+            CurrentFrameFormat = new FrameFormat(_width, _height, _format);
 
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
@@ -227,13 +230,13 @@ namespace CameraLib.USB
 
         private async Task<VideoCapture?> GetCaptureDevice(CancellationToken token)
         {
-            var cameras = DsDevice.GetDevicesOfCat(FilterCategory.VideoInputDevice) ?? Array.Empty<DsDevice>();
+            var cameras = DsDevice.GetDevicesOfCat(FilterCategory.VideoInputDevice) ?? [];
             var camNumber = cameras.TakeWhile(cam => _usbCamera?.DevicePath != cam.DevicePath).Count();
 
             if (cameras.Length == 0 || camNumber >= cameras.Length)
                 return null;
 
-            return await Task.Run(() => new VideoCapture(camNumber), token);
+            return await Task.Run(() => new VideoCapture(camNumber, VideoCaptureAPIs.DSHOW), token);
         }
 
         private void CaptureImage()
@@ -249,7 +252,7 @@ namespace CameraLib.USB
                     if (!(_captureDevice?.Retrieve(_frame) ?? false) || _frame.Empty())
                         return;
 
-                    CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
+                    //CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
                     ImageCapturedEvent?.Invoke(this, _frame);
                 }
                 catch
@@ -294,38 +297,35 @@ namespace CameraLib.USB
             if (!IsRunning)
                 return;
 
-            //lock (_getPictureThreadLock)
+            _keepAliveTimer.Stop();
+
+            if (_captureDevice != null)
             {
-                _keepAliveTimer.Stop();
-
-                if (_captureDevice != null)
+                _cancellationTokenSourceCameraGrabber?.Cancel();
+                try
                 {
-                    _cancellationTokenSourceCameraGrabber?.Cancel();
-                    try
-                    {
-                        _captureTask?.Wait(5000);
-                        _captureDevice?.Release();
-                        _captureDevice?.Dispose();
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Camera Stop() failed: {ex}");
-                    }
+                    _captureTask?.Wait(5000);
+                    _captureDevice?.Release();
+                    _captureDevice?.Dispose();
                 }
-
-                if (cancellation)
+                catch (Exception ex)
                 {
-                    _cancellationTokenSourceCameraGrabber?.Cancel();
-                    _cancellationTokenSource?.Cancel();
+                    Console.WriteLine($"Camera Stop() failed: {ex}");
                 }
-
-                CurrentFrameFormat = null;
-                _fpsTimer.Reset();
-                IsRunning = false;
             }
+
+            if (cancellation)
+            {
+                _cancellationTokenSourceCameraGrabber?.Cancel();
+                _cancellationTokenSource?.Cancel();
+            }
+
+            CurrentFrameFormat = null;
+            _fpsTimer.Reset();
+            IsRunning = false;
         }
 
-        public async Task<Mat?> GrabFrame(CancellationToken token)
+        public async Task<Mat?> GrabFrame(CancellationToken token, int width = 0, int height = 0, string format = "")
         {
             if (IsRunning)
             {
@@ -356,6 +356,23 @@ namespace CameraLib.USB
                     _captureDevice = await GetCaptureDevice(token);
                     if (_captureDevice == null)
                         return;
+
+                    if (width > 0 && height > 0)
+                    {
+                        var res = GetAllAvailableResolution(_usbCamera);
+                        if (res.Exists(n => n.Width == width && n.Height == height))
+                        {
+                            _captureDevice.Set(VideoCaptureProperties.FrameWidth, width);
+                            _captureDevice.Set(VideoCaptureProperties.FrameHeight, height);
+                        }
+
+                        if (!string.IsNullOrEmpty(format))
+                        {
+                            var codecId = FrameFormat.Codecs.FirstOrDefault(n => n.Value == format);
+                            if (!string.IsNullOrEmpty(codecId.Value))
+                                _captureDevice.Set(VideoCaptureProperties.FourCC, codecId.Key);
+                        }
+                    }
 
                     if (_captureDevice.Grab())
                     {
