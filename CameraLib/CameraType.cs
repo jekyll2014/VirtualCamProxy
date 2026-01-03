@@ -1,14 +1,14 @@
-﻿namespace CameraLib
+﻿namespace CameraLib;
+
+public enum CameraType
 {
-    public enum CameraType
-    {
-        Unknown,
-        USB,
-        USB_FC,
-        IP,
-        MJPEG,
-        Screen,
-        ImageFile,
-        VideoFile
-    }
+    Unknown,
+    USB,
+    USB_FC,
+    IP,
+    MJPEG,
+    Basler,
+    Screen,
+    ImageFile,
+    VideoFile
 }

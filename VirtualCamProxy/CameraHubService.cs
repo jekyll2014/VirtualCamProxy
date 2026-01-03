@@ -8,7 +8,10 @@ using CameraLib.USB;
 
 using OpenCvSharp;
 
+using System.Diagnostics;
+
 namespace VirtualCamProxy;
+
 public class CameraHubService : IDisposable
 {
     public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
@@ -17,23 +20,23 @@ public class CameraHubService : IDisposable
     public ICamera? CurrentCamera { get; private set; }
 
     private readonly CameraSettings _cameraSettings;
-    private bool disposedValue;
+    private bool _disposedValue;
 
     public CameraHubService(CameraSettings settings)
     {
         _cameraSettings = settings;
     }
 
-    public async Task RefreshCameraCollection()
+    public async Task RefreshCameraCollectionAsync()
     {
         // remove predefined cameras from collection
         Cameras.Clear();
 
         // add custom cameras
-        Console.WriteLine("Adding predefined cameras...");
+        Debug.WriteLine("Adding predefined cameras...");
         Parallel.ForEach(_cameraSettings.CustomCameras, async (cam) =>
         {
-            Console.WriteLine($"\t{cam.Name}");
+            Debug.WriteLine($"\t{cam.Name}");
             ICamera? serverCamera = null;
             if (cam.Type == CameraType.IP)
             {
@@ -45,7 +48,7 @@ public class CameraHubService : IDisposable
 
                 if (cam.ForceConnect)
                 {
-                    await serverCamera.GetImageData(_cameraSettings.DiscoveryTimeOut);
+                    await serverCamera.GetImageDataAsync(_cameraSettings.DiscoveryTimeOut);
                 }
                 else
                     serverCamera.Description.FrameFormats = new[] { new FrameFormat(0, 0, "") };
@@ -59,7 +62,7 @@ public class CameraHubService : IDisposable
                     password: cam.Password);
 
                 if (cam.ForceConnect)
-                    await serverCamera.GetImageData(_cameraSettings.DiscoveryTimeOut);
+                    await serverCamera.GetImageDataAsync(_cameraSettings.DiscoveryTimeOut);
                 else
                     serverCamera.Description.FrameFormats = new[] { new FrameFormat(0, 0, "MJPG") };
             }
@@ -71,7 +74,7 @@ public class CameraHubService : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(ex);
+                    Debug.WriteLine(ex);
 
                     return;
                 }
@@ -84,7 +87,7 @@ public class CameraHubService : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(ex);
+                    Debug.WriteLine(ex);
 
                     return;
                 }
@@ -99,10 +102,10 @@ public class CameraHubService : IDisposable
 
         if (_cameraSettings.AutoSearchUsb)
         {
-            Console.WriteLine("Autodetecting USB cameras...");
+            Debug.WriteLine("Autodetecting USB cameras...");
             var usbCameras = UsbCamera.DiscoverUsbCameras();
             foreach (var c in usbCameras)
-                Console.WriteLine($"USB-CameraStream: {c.Name} - [{c.Path}]");
+                Debug.WriteLine($"USB-CameraStream: {c.Name} - [{c.Path}]");
 
             // add newly discovered cameras
             foreach (var c in usbCameras
@@ -120,10 +123,10 @@ public class CameraHubService : IDisposable
 
         if (_cameraSettings.AutoSearchUsbFC)
         {
-            Console.WriteLine("Autodetecting USB_FC cameras...");
+            Debug.WriteLine("Autodetecting USB_FC cameras...");
             var usbFcCameras = UsbCameraFc.DiscoverUsbCameras();
             foreach (var c in usbFcCameras)
-                Console.WriteLine($"USB_FC-CameraStream: {c.Name} - [{c.Path}]");
+                Debug.WriteLine($"USB_FC-CameraStream: {c.Name} - [{c.Path}]");
 
             // add newly discovered cameras
             foreach (var c in usbFcCameras
@@ -141,17 +144,17 @@ public class CameraHubService : IDisposable
 
         if (_cameraSettings.AutoSearchIp)
         {
-            Console.WriteLine("Autodetecting IP cameras...");
+            Debug.WriteLine("Autodetecting IP cameras...");
             var ipCameras = await IpCamera.DiscoverOnvifCamerasAsync(_cameraSettings.DiscoveryTimeOut);
             foreach (var c in ipCameras)
-                Console.WriteLine($"IP-Camera: {c.Name} - [{c.Path}]");
+                Debug.WriteLine($"IP-Camera: {c.Name} - [{c.Path}]");
 
             // add newly discovered cameras
             foreach (var c in ipCameras
                          .Where(c => Cameras
                              .All(n => n.Description.Path != c.Path)))
             {
-                Console.WriteLine($"Adding IP-Camera: {c.Name} - [{c.Path}]");
+                Debug.WriteLine($"Adding IP-Camera: {c.Name} - [{c.Path}]");
                 var serverCamera = new IpCamera(c.Path)
                 {
                     FrameTimeout = _cameraSettings.FrameTimeout
@@ -161,12 +164,12 @@ public class CameraHubService : IDisposable
             }
         }
 
-        if (_cameraSettings.AutoSearchDektop)
+        if (_cameraSettings.AutoSearchDesktop)
         {
-            Console.WriteLine("Autodetecting desktop screens...");
+            Debug.WriteLine("Autodetecting desktop screens...");
             var screenCameras = ScreenCamera.DiscoverScreenCameras();
             foreach (var c in screenCameras)
-                Console.WriteLine($"Screen-CameraStream: {c.Name} - [{c.Path}]");
+                Debug.WriteLine($"Screen-CameraStream: {c.Name} - [{c.Path}]");
 
             // add newly discovered cameras
             foreach (var c in screenCameras
@@ -185,31 +188,33 @@ public class CameraHubService : IDisposable
         Cameras.Add(new VideoFileCamera(""));
         Cameras.Add(new ImageFileCamera(""));
 
-        Console.WriteLine("Done.");
+        Debug.WriteLine("Done.");
     }
 
-    public async Task<CancellationToken> HookCamera(int cameraIndex, int width, int height, string imageFormat = "")
+    public async Task<CancellationToken> HookCameraAsync(int cameraIndex, int width, int height, string imageFormat = "")
     {
-        var cameraId = GetCamera(cameraIndex)?.Description.Path;
-        if (cameraId == null)
+        var cameraDescription = GetCamera(cameraIndex)?.Description;
+        var cameraId = cameraDescription?.Path;
+
+        if (cameraDescription == null || cameraId == null)
             return CancellationToken.None;
 
-        return await HookCamera(cameraId, width, height, imageFormat);
+        return await HookCameraAsync(cameraDescription.Type, cameraId, width, height, imageFormat);
     }
 
-    public async Task<CancellationToken> HookCamera(string cameraId, int width, int height, string imageFormat = "")
+    public async Task<CancellationToken> HookCameraAsync(CameraType cameraType, string cameraId, int width, int height, string imageFormat = "")
     {
-        if (Cameras.All(n => n.Description.Path != cameraId))
+        if (Cameras.All(n => n.Description.Type == cameraType && n.Description.Path != cameraId))
             return CancellationToken.None;
 
         CurrentCamera = Cameras
-        .FirstOrDefault(n => n.Description.Path == cameraId);
+        .FirstOrDefault(n => n.Description.Type == cameraType && n.Description.Path == cameraId);
 
         if (CurrentCamera == null)
             return CancellationToken.None;
 
         CurrentCamera.ImageCapturedEvent += GetImageFromCameraStream;
-        if (!await CurrentCamera.Start(width,
+        if (!await CurrentCamera.StartAsync(width,
                 height,
                 imageFormat,
                 CancellationToken.None))
@@ -248,13 +253,12 @@ public class CameraHubService : IDisposable
 
     private void GetImageFromCameraStream(ICamera camera, Mat image)
     {
-        if (!image.Empty())
-            ImageCapturedEvent?.Invoke(CurrentCamera, image);
+        ImageCapturedEvent?.Invoke(camera, image);
     }
 
     protected virtual void Dispose(bool disposing)
     {
-        if (!disposedValue)
+        if (!_disposedValue)
         {
             if (disposing)
             {
@@ -266,7 +270,7 @@ public class CameraHubService : IDisposable
                 //Image?.Dispose();
             }
 
-            disposedValue = true;
+            _disposedValue = true;
         }
     }
 

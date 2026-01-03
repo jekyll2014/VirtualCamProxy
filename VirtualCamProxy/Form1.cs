@@ -200,7 +200,7 @@ public partial class Form1 : Form
             icam.SetFiles(_settings.ImageFileCamera.Files);
         }
 
-        _cancellationToken = await _cameraHub.HookCamera(comboBox_cameras.SelectedIndex, w, h, "");
+        _cancellationToken = await _cameraHub.HookCameraAsync(comboBox_cameras.SelectedIndex, w, h, "");
         if (_cancellationToken == CancellationToken.None)
         {
             _currentSource.Stop();
@@ -233,7 +233,7 @@ public partial class Form1 : Form
         button_refreshAll.Text = "Refreshing...";
 
         comboBox_cameras.Items.Clear();
-        await _cameraHub.RefreshCameraCollection();
+        await _cameraHub.RefreshCameraCollectionAsync();
         _cameraHub.Cameras.RemoveAll(n => n.Description.Name == SoftCamName);
         var i = 1;
         foreach (var cam in _cameraHub.Cameras)
@@ -255,7 +255,7 @@ public partial class Form1 : Form
         DisableUi();
         button_refresh.Text = "Refreshing...";
 
-        await camera.GetImageData();
+        await camera.GetImageDataAsync();
         ComboBox_cameras_SelectedIndexChanged(this, EventArgs.Empty);
 
         button_refresh.Text = "Refresh";
@@ -350,7 +350,7 @@ public partial class Form1 : Form
         DisableUi();
 
         var frameFormat = camera.Description.FrameFormats.ToArray()[comboBox_camResolution.SelectedIndex];
-        var image = await camera.GrabFrame(CancellationToken.None, frameFormat.Width, frameFormat.Height, frameFormat.Format);
+        var image = await camera.GrabFrameAsync(CancellationToken.None, frameFormat.Width, frameFormat.Height, frameFormat.Format);
         if (image != null)
         {
             var bitmap = MatToBitmap(image);
@@ -455,8 +455,9 @@ public partial class Form1 : Form
         }
 
         _rotated ??= new Mat();
-        if (filters.Rotate != null)
-            Cv2.Rotate(image, _rotated, (RotateFlags)filters.Rotate);
+        var rotate = filters.Rotate;
+        if (rotate != null)
+            Cv2.Rotate(image, _rotated, (RotateFlags)rotate);
         else
             _rotated = image;
 

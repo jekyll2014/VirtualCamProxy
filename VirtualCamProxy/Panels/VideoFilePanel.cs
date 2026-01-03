@@ -1,7 +1,5 @@
 ﻿using CameraExtension;
 
-using System.Collections.Generic;
-
 using VirtualCamProxy.Settings;
 
 namespace VirtualCamProxy;

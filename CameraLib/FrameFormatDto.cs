@@ -1,4 +1,6 @@
-﻿namespace CameraLib;
+﻿using System;
+
+namespace CameraLib;
 
 public class FrameFormatDto
 {
@@ -23,6 +25,6 @@ public class FrameFormatDto
 
     public override int GetHashCode()
     {
-        return $"{Width}{Height}{Format}{Fps}".GetHashCode();
+        return HashCode.Combine(Width, Height, Format);
     }
 }

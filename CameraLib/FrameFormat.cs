@@ -1,18 +1,18 @@
 ﻿using System.Collections.Generic;
 
-namespace CameraLib
-{
-    public class FrameFormat : FrameFormatDto
-    {
-        public FrameFormat(int width = 0, int height = 0, string format = "", double fps = 0)
-        {
-            Width = width;
-            Height = height;
-            Format = format;
-            Fps = fps;
-        }
+namespace CameraLib;
 
-        public static readonly Dictionary<int, string> Codecs = new Dictionary<int, string>
+public class FrameFormat : FrameFormatDto
+{
+    public FrameFormat(int width = 0, int height = 0, string format = "", double fps = 0)
+    {
+        Width = width;
+        Height = height;
+        Format = format;
+        Fps = fps;
+    }
+
+    public static readonly Dictionary<int, string> Codecs = new Dictionary<int, string>
         {
             {-1, "UNKN"}, // Unknown
             {810961203, "3IV0"}, // 'result := 'MPEG4-based codec 3ivx'
@@ -354,9 +354,8 @@ namespace CameraLib
             {1195724890, "ZPEG"} //'Metheus Video Zipper'"}
         };
 
-        public override string ToString()
-        {
-            return $"{Width}x{Height} {Fps} {Format}";
-        }
+    public override string ToString()
+    {
+        return $"{Width}x{Height} {Fps} {Format}";
     }
 }

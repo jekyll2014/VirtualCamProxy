@@ -16,12 +16,17 @@ public class ImageFileCamera : ICamera
     public int FrameTimeout { get; set; } = 10000;
 
     public event ICamera.ImageCapturedEventHandler? ImageCapturedEvent;
+    public event ICamera.CameraConnectedEventHandler? CameraConnectedEvent;
+    public event ICamera.CameraDisconnectedEventHandler? CameraDisconnectedEvent;
+
     public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
     public bool RepeatFile = true;
 
     private CancellationTokenSource? _cancellationTokenSource;
     private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
     private const string CameraName = "Image file(s)";
+    private const int FpsCalculationFrameCount = 100;
+    private const int FrameCheckDelayMs = 10;
     private Task? _captureTask;
     private readonly Stopwatch _fpsTimer = new();
     private Mat? _frame = new Mat();
@@ -31,7 +36,6 @@ public class ImageFileCamera : ICamera
     private string _imageFile = string.Empty;
     private int _stepToNextFile = 0;
     public int Delay = 1000;
-    private int _gcCounter = 0;
     private bool _disposedValue;
 
     public ImageFileCamera(string path, string name = "")
@@ -46,7 +50,7 @@ public class ImageFileCamera : ICamera
         CurrentFps = 0;
     }
 
-    public async Task<bool> GetImageData(int discoveryTimeout = 1000)
+    public async Task<bool> GetImageDataAsync(int discoveryTimeout = 1000)
     {
         if (string.IsNullOrEmpty(_imageFile))
             return false;
@@ -150,7 +154,7 @@ public class ImageFileCamera : ICamera
         ];
     }
 
-    public async Task<bool> Start(int width, int height, string format, CancellationToken token)
+    public async Task<bool> StartAsync(int width, int height, string format, CancellationToken token)
     {
         if (IsRunning)
             return true;
@@ -179,13 +183,14 @@ public class ImageFileCamera : ICamera
                         await _cancellationTokenSourceCameraGrabber.CancelAsync();
                 }
                 else
-                    await Task.Delay(10, CancellationToken.None);
+                    await Task.Delay(FrameCheckDelayMs, _cancellationTokenSourceCameraGrabber.Token);
             }
 
             Stop(true);
         }, _cancellationTokenSourceCameraGrabber.Token);
 
         IsRunning = true;
+        CameraConnectedEvent?.Invoke(this);
 
         return true;
     }
@@ -207,7 +212,7 @@ public class ImageFileCamera : ICamera
                 return;
 
             CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
-            ImageCapturedEvent?.Invoke(this, _frame);
+            ImageCapturedEvent?.Invoke(this, _frame.Clone());
 
             if (!_fpsTimer.IsRunning)
             {
@@ -217,7 +222,7 @@ public class ImageFileCamera : ICamera
             else
             {
                 _frameCount++;
-                if (_frameCount >= 100)
+                if (_frameCount >= FpsCalculationFrameCount)
                 {
                     if (_fpsTimer.ElapsedMilliseconds > 0)
                         CurrentFps = (double)_frameCount / ((double)_fpsTimer.ElapsedMilliseconds / (double)1000);
@@ -225,13 +230,6 @@ public class ImageFileCamera : ICamera
                     _fpsTimer.Reset();
                     _frameCount = 0;
                 }
-            }
-
-            _gcCounter++;
-            if (_gcCounter >= 10)
-            {
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
-                _gcCounter = 0;
             }
         }
         catch
@@ -250,42 +248,41 @@ public class ImageFileCamera : ICamera
         if (!IsRunning)
             return;
 
-        //lock (_getPictureThreadLock)
+        if (cancellation)
         {
-            if (cancellation)
-            {
-                _cancellationTokenSourceCameraGrabber?.Cancel();
-                _cancellationTokenSource?.Cancel();
-            }
-
-            CurrentFrameFormat = null;
-            _fpsTimer.Reset();
-            IsRunning = false;
+            _cancellationTokenSourceCameraGrabber?.Cancel();
+            _cancellationTokenSource?.Cancel();
         }
+
+        CurrentFrameFormat = null;
+        _fpsTimer.Reset();
+        IsRunning = false;
+        CameraDisconnectedEvent?.Invoke(this);
     }
 
-    public async Task<Mat?> GrabFrame(CancellationToken token, int width = 0, int height = 0, string format = "")
+    public async Task<Mat?> GrabFrameAsync(CancellationToken token, int width = 0, int height = 0, string format = "")
     {
         if (IsRunning)
         {
+            Mat? capturedFrame = null;
+            void CameraImageCapturedEvent(ICamera camera, Mat image)
+            {
+                capturedFrame ??= image.Clone();
+            }
+
             ImageCapturedEvent += CameraImageCapturedEvent;
             var watch = new Stopwatch();
             watch.Restart();
             while (IsRunning
-                   && (_frame == null || _frame.Empty())
+                   && capturedFrame == null
                    && !token.IsCancellationRequested
                    && watch.ElapsedMilliseconds < FrameTimeout)
-                await Task.Delay(10, CancellationToken.None);
+                await Task.Delay(FrameCheckDelayMs, token);
 
             ImageCapturedEvent -= CameraImageCapturedEvent;
             watch.Stop();
 
-            return _frame;
-
-            void CameraImageCapturedEvent(ICamera camera, Mat image)
-            {
-                _frame = image;
-            }
+            return capturedFrame;
         }
 
         if (string.IsNullOrEmpty(_imageFile) || !File.Exists(_imageFile))
@@ -307,9 +304,9 @@ public class ImageFileCamera : ICamera
     {
         while (!token.IsCancellationRequested)
         {
-            var image = await GrabFrame(token);
+            var image = await GrabFrameAsync(token);
             if (image == null)
-                await Task.Delay(10, CancellationToken.None);
+                await Task.Delay(FrameCheckDelayMs, token);
             else
                 yield return image;
         }
@@ -365,6 +362,7 @@ public class ImageFileCamera : ICamera
                 Stop();
                 _cancellationTokenSourceCameraGrabber?.Dispose();
                 _cancellationTokenSource?.Dispose();
+                _frame?.Dispose();
             }
 
             _disposedValue = true;
