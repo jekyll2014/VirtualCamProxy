@@ -60,6 +60,18 @@ namespace VirtualCamera
 
         public SoftCamera(int xResolution, int yResolution, float frameRate = 0f)
         {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(xResolution, nameof(xResolution));
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(yResolution, nameof(yResolution));
+
+            if (xResolution % 4 != 0)
+                throw new ArgumentException("Resolution width must be a multiple of 4", nameof(xResolution));
+
+            if (yResolution % 4 != 0)
+                throw new ArgumentException("Resolution height must be a multiple of 4", nameof(yResolution));
+
+            if (frameRate < 0)
+                throw new ArgumentOutOfRangeException(nameof(frameRate), frameRate, "Frame rate cannot be negative");
+
             ResolutionX = xResolution;
             ResolutionY = yResolution;
             _dllReg = new DllReg(dllName);
@@ -119,16 +131,15 @@ namespace VirtualCamera
         {
             if (!_disposedValue)
             {
+                scDeleteCamera(_cam);
                 if (disposing)
                 {
-                    // dispose managed state (managed objects)
-                    scDeleteCamera(_cam);
                     _dllReg.Dispose();
                 }
 
                 // free unmanaged resources (unmanaged objects) and override finalizer
                 // set large fields to null
-                _buffer = null;
+                _buffer = null!;
                 _disposedValue = true;
             }
         }
@@ -136,9 +147,6 @@ namespace VirtualCamera
         // override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
         ~SoftCamera()
         {
-            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-            scDeleteCamera(_cam);
-            _dllReg.Dispose();
             Dispose(disposing: false);
         }
 

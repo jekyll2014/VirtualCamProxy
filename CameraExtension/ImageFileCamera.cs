@@ -156,6 +156,8 @@ public class ImageFileCamera : ICamera
 
     public async Task<bool> StartAsync(int width, int height, string format, CancellationToken token)
     {
+        ObjectDisposedException.ThrowIf(_disposedValue, this);
+
         if (IsRunning)
             return true;
 
@@ -262,6 +264,8 @@ public class ImageFileCamera : ICamera
 
     public async Task<Mat?> GrabFrameAsync(CancellationToken token, int width = 0, int height = 0, string format = "")
     {
+        ObjectDisposedException.ThrowIf(_disposedValue, this);
+
         if (IsRunning)
         {
             Mat? capturedFrame = null;
@@ -302,6 +306,8 @@ public class ImageFileCamera : ICamera
 
     public async IAsyncEnumerable<Mat> GrabFrames([EnumeratorCancellation] CancellationToken token)
     {
+        ObjectDisposedException.ThrowIf(_disposedValue, this);
+
         while (!token.IsCancellationRequested)
         {
             var image = await GrabFrameAsync(token);
@@ -310,47 +316,6 @@ public class ImageFileCamera : ICamera
             else
                 yield return image;
         }
-    }
-
-    public FrameFormat GetNearestFormat(int width, int height, string format)
-    {
-        FrameFormat? selectedFormat;
-
-        if (!Description.FrameFormats.Any())
-            return new FrameFormat(0, 0);
-
-        if (Description.FrameFormats.Count() == 1)
-            return Description.FrameFormats.First();
-
-        if (width > 0 && height > 0)
-        {
-            var mpix = width * height;
-            selectedFormat = Description.FrameFormats.MinBy(n => Math.Abs(n.Width * n.Height - mpix));
-        }
-        else
-            selectedFormat = Description.FrameFormats.MaxBy(n => n.Width * n.Height);
-
-        var result = Description.FrameFormats
-            .Where(n =>
-                n.Width == (selectedFormat?.Width ?? 0)
-                && n.Height == (selectedFormat?.Height ?? 0))
-            .ToArray();
-
-        if (result.Length != 0)
-        {
-            var result2 = result.Where(n => n.Format == format)
-                .ToArray();
-
-            if (result2.Length != 0)
-                result = result2;
-        }
-
-        if (result.Length == 0)
-            return new FrameFormat(0, 0);
-
-        var result3 = result.MaxBy(n => n.Fps) ?? result[0];
-
-        return result3;
     }
 
     protected virtual void Dispose(bool disposing)

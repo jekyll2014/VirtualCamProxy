@@ -115,13 +115,4 @@ public interface ICamera : IDisposable
     /// </code>
     /// </remarks>
     public IAsyncEnumerable<Mat> GrabFrames(CancellationToken token);
-
-    /// <summary>
-    /// Finds the closest matching format to the requested parameters.
-    /// </summary>
-    /// <param name="width">Desired width.</param>
-    /// <param name="height">Desired height.</param>
-    /// <param name="format">Desired format.</param>
-    /// <returns>The nearest matching FrameFormat.</returns>
-    public FrameFormat GetNearestFormat(int width, int height, string format);
 }

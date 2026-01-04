@@ -34,71 +34,71 @@ public class CameraHubService : IDisposable
 
         // add custom cameras
         Debug.WriteLine("Adding predefined cameras...");
-        Parallel.ForEach(_cameraSettings.CustomCameras, async (cam) =>
+
+        var customCameraTasks = _cameraSettings.CustomCameras.Select(async cam =>
         {
             Debug.WriteLine($"\t{cam.Name}");
             ICamera? serverCamera = null;
-            if (cam.Type == CameraType.IP)
+
+            try
             {
-                serverCamera = new IpCamera(path: cam.Path,
+                if (cam.Type == CameraType.IP)
+                {
+                    serverCamera = new IpCamera(path: cam.Path,
+                            name: cam.Name,
+                            authenticationType: cam.AuthenticationType,
+                            login: cam.Login,
+                            password: cam.Password);
+
+                    if (cam.ForceConnect)
+                    {
+                        await serverCamera.GetImageDataAsync(_cameraSettings.DiscoveryTimeOut);
+                    }
+                    else
+                        serverCamera.Description.FrameFormats = new[] { new FrameFormat(0, 0, "") };
+                }
+                else if (cam.Type == CameraType.MJPEG)
+                {
+                    serverCamera = new MjpegCamera(path: cam.Path,
                         name: cam.Name,
                         authenticationType: cam.AuthenticationType,
                         login: cam.Login,
                         password: cam.Password);
 
-                if (cam.ForceConnect)
-                {
-                    await serverCamera.GetImageDataAsync(_cameraSettings.DiscoveryTimeOut);
+                    if (cam.ForceConnect)
+                        await serverCamera.GetImageDataAsync(_cameraSettings.DiscoveryTimeOut);
+                    else
+                        serverCamera.Description.FrameFormats = new[] { new FrameFormat(0, 0, "MJPG") };
                 }
-                else
-                    serverCamera.Description.FrameFormats = new[] { new FrameFormat(0, 0, "") };
-            }
-            else if (cam.Type == CameraType.MJPEG)
-            {
-                serverCamera = new MjpegCamera(path: cam.Path,
-                    name: cam.Name,
-                    authenticationType: cam.AuthenticationType,
-                    login: cam.Login,
-                    password: cam.Password);
-
-                if (cam.ForceConnect)
-                    await serverCamera.GetImageDataAsync(_cameraSettings.DiscoveryTimeOut);
-                else
-                    serverCamera.Description.FrameFormats = new[] { new FrameFormat(0, 0, "MJPG") };
-            }
-            else if (cam.Type == CameraType.USB)
-            {
-                try
+                else if (cam.Type == CameraType.USB)
                 {
                     serverCamera = new UsbCamera(cam.Path, cam.Name);
                 }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine(ex);
-
-                    return;
-                }
-            }
-            else if (cam.Type == CameraType.USB_FC)
-            {
-                try
+                else if (cam.Type == CameraType.USB_FC)
                 {
                     serverCamera = new UsbCameraFc(cam.Path, cam.Name);
                 }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine(ex);
 
-                    return;
+                if (serverCamera != null)
+                {
+                    serverCamera.FrameTimeout = _cameraSettings.FrameTimeout;
                 }
             }
-
-            if (serverCamera != null)
+            catch (Exception ex)
             {
-                serverCamera.FrameTimeout = _cameraSettings.FrameTimeout;
-                Cameras.Add(serverCamera);
+                Debug.WriteLine($"Error initializing camera {cam.Name}: {ex}");
+                serverCamera = null;
             }
+
+            return serverCamera;
         });
+
+        var customCameras = await Task.WhenAll(customCameraTasks);
+
+        foreach (var camera in customCameras.Where(c => c != null))
+        {
+            Cameras.Add(camera!);
+        }
 
         if (_cameraSettings.AutoSearchUsb)
         {
@@ -266,8 +266,6 @@ public class CameraHubService : IDisposable
                 CurrentCamera?.Dispose();
                 foreach (var cam in Cameras)
                     cam.Dispose();
-
-                //Image?.Dispose();
             }
 
             _disposedValue = true;

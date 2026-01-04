@@ -145,10 +145,6 @@ public class IpCamera : ICamera
         AuthenticationType = authenticationType;
         Login = login;
         Password = password;
-
-        if (AuthenticationType == AuthType.Plain)
-            path = string.Format(path, Login, Password);
-
         name = string.IsNullOrEmpty(name)
             ? Dns.GetHostAddresses(new Uri(path).Host).FirstOrDefault()?.ToString() ?? path
             : name;
@@ -163,7 +159,8 @@ public class IpCamera : ICamera
 
     public async Task<bool> GetImageDataAsync(int discoveryTimeout = 5000)
     {
-        var cameraUri = new Uri(Description.Path);
+        var path = string.Format(Description.Path, Login, Password);
+        var cameraUri = new Uri(path);
         if (await PingAddress(cameraUri.Host, discoveryTimeout))
         {
             var image = await GrabFrameAsync(CancellationToken.None);
@@ -217,13 +214,21 @@ public class IpCamera : ICamera
 
     public async Task<bool> StartAsync(int width, int height, string format, CancellationToken token)
     {
+        ObjectDisposedException.ThrowIf(_disposedValue, this);
+
+        if (width < 0)
+            throw new ArgumentOutOfRangeException(nameof(width), width, "Width cannot be negative");
+
+        if (height < 0)
+            throw new ArgumentOutOfRangeException(nameof(height), height, "Height cannot be negative");
+
         if (IsRunning)
             return true;
 
         try
         {
             _captureDevice?.Dispose();
-            _captureDevice = await GetCaptureDevice(token);
+            _captureDevice = await GetCaptureDevice(token).WaitAsync(TimeSpan.FromMilliseconds(FrameTimeout));
         }
         catch (Exception ex)
         {
@@ -280,13 +285,14 @@ public class IpCamera : ICamera
 
     private async Task<VideoCapture?> GetCaptureDevice(CancellationToken token)
     {
+        var path = string.Format(Description.Path, Login, Password);
         try
         {
-            return await Task.Run(() => new VideoCapture(Description.Path), token);
+            return await Task.Run(() => new VideoCapture(path), token);
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Can not connect to camera: {Description.Path}\r\n{ex}");
+            Debug.WriteLine($"Can not connect to camera: {path}\r\n{ex}");
         }
 
         return null;
@@ -386,6 +392,14 @@ public class IpCamera : ICamera
 
     public async Task<Mat?> GrabFrameAsync(CancellationToken token, int width = 0, int height = 0, string format = "")
     {
+        ObjectDisposedException.ThrowIf(_disposedValue, this);
+
+        if (width < 0)
+            throw new ArgumentOutOfRangeException(nameof(width), width, "Width cannot be negative");
+
+        if (height < 0)
+            throw new ArgumentOutOfRangeException(nameof(height), height, "Height cannot be negative");
+
         if (IsRunning)
         {
             Mat? capturedFrame = null;
@@ -400,8 +414,8 @@ public class IpCamera : ICamera
             while (IsRunning
                    && capturedFrame == null
                    && !token.IsCancellationRequested
-                   && watch.ElapsedMilliseconds < FrameTimeout)
-                await Task.Delay(10, token);
+                   && watch.ElapsedMilliseconds < FrameTimeout) ;
+            //await Task.Delay(10, token);
 
             ImageCapturedEvent -= CameraImageCapturedEvent;
             watch.Stop();
@@ -413,7 +427,7 @@ public class IpCamera : ICamera
         {
             try
             {
-                _captureDevice = await GetCaptureDevice(token);
+                _captureDevice = await GetCaptureDevice(token).WaitAsync(TimeSpan.FromMilliseconds(FrameTimeout));
                 if (_captureDevice == null)
                     return;
 
@@ -444,6 +458,8 @@ public class IpCamera : ICamera
 
     public async IAsyncEnumerable<Mat> GrabFrames([EnumeratorCancellation] CancellationToken token)
     {
+        ObjectDisposedException.ThrowIf(_disposedValue, this);
+
         while (!token.IsCancellationRequested)
         {
             var image = await GrabFrameAsync(token);
@@ -452,47 +468,6 @@ public class IpCamera : ICamera
             else
                 yield return image;
         }
-    }
-
-    public FrameFormat GetNearestFormat(int width, int height, string format)
-    {
-        FrameFormat? selectedFormat;
-
-        if (!Description.FrameFormats.Any())
-            return new FrameFormat(0, 0);
-
-        if (Description.FrameFormats.Count() == 1)
-            return Description.FrameFormats.First();
-
-        if (width > 0 && height > 0)
-        {
-            var mpix = width * height;
-            selectedFormat = Description.FrameFormats.MinBy(n => Math.Abs(n.Width * n.Height - mpix));
-        }
-        else
-            selectedFormat = Description.FrameFormats.MaxBy(n => n.Width * n.Height);
-
-        var result = Description.FrameFormats
-            .Where(n =>
-                n.Width == (selectedFormat?.Width ?? 0)
-                && n.Height == (selectedFormat?.Height ?? 0))
-            .ToArray();
-
-        if (result.Length != 0)
-        {
-            var result2 = result.Where(n => n.Format == format)
-                .ToArray();
-
-            if (result2.Length != 0)
-                result = result2;
-        }
-
-        if (result.Length == 0)
-            return new FrameFormat(0, 0);
-
-        var result3 = result.MaxBy(n => n.Fps) ?? result[0];
-
-        return result3;
     }
 
     protected virtual void Dispose(bool disposing)

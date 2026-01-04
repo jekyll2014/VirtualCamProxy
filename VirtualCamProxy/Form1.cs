@@ -25,16 +25,15 @@ public partial class Form1 : Form
 
     private readonly JsonStorage<SoftCameraSettings> _configuration = new(ConfigFileName, true);
     private readonly SoftCameraSettings _settings;
-    //private Task? _cameraFeed;
     private CancellationToken? _cancellationToken;
     private readonly CameraHubService _cameraHub;
     private bool _cameraStarted = false;
     private SoftCamera? _softCamera;
     private ICamera? _currentSource;
-    private static Mat? _resizedImage = new Mat();
-    private static Mat? _resizedImage2 = new Mat();
+    private Mat? _resizedImage = new Mat();
+    private Mat? _resizedImage2 = new Mat();
     private Mat? _filtered = new Mat();
-    private static Mat? _rotated = new Mat();
+    private Mat? _rotated = new Mat();
     private Bitmap? _bitmap = null;
 
     public Form1()
@@ -57,7 +56,6 @@ public partial class Form1 : Form
         textBox_y.Text = _settings.Height.ToString();
         checkBox_showStream.Checked = _settings.ShowStream;
         RefreshUi();
-        //Button_refreshAll_Click(this, EventArgs.Empty);
     }
 
     private void Form1_FormClosing(object sender, FormClosingEventArgs e)
@@ -72,65 +70,43 @@ public partial class Form1 : Form
         _configuration.Save();
 
         _softCamera?.Dispose();
+
+        // Dispose Mat objects to prevent memory leaks
+        _resizedImage?.Dispose();
+        _resizedImage2?.Dispose();
+        _filtered?.Dispose();
+        _rotated?.Dispose();
+        _bitmap?.Dispose();
     }
-
-    /*private async Task CameraFeed()
-    {
-        _cameraStarted = true;
-        var softCamWidth = _settings.Width;
-        var softCamHeight = _settings.Height;
-        Bitmap? bitmap = null;
-        while (!(_cancellationToken?.IsCancellationRequested ?? true))
-        {
-            if (_softCamera != null && !(_cameraHub.Image == null || _cameraHub.Image.Empty()))
-            {
-                if (!_softCamera.AppIsConnected)
-                    continue;
-
-                var image = _cameraHub.Image;
-                _filtered = ApplyFilters(image, _settings.Filters, softCamWidth, softCamHeight);
-                bitmap = MatToBitmap(_filtered);
-                if (bitmap != null)
-                {
-                    _softCamera.PushFrame(bitmap);
-                    if (_settings.ShowStream)
-                    {
-                        this.Invoke(() =>
-                        {
-                            pictureBox_cam.Image = bitmap;
-                        });
-                    }
-                }
-            }
-            else
-            {
-                await Task.Delay(10);
-            }
-        }
-
-        _cameraStarted = false;
-    }*/
 
     private async void ImageCapturedEvent(ICamera camera, Mat frame)
     {
-        if (_softCamera == null || frame.Empty())
-            return;
-
-        if (!_softCamera.AppIsConnected)
-            return;
-
-        _filtered = ApplyFilters(frame, _settings.Filters, _settings.Width, _settings.Height);
-        _bitmap = MatToBitmap(_filtered);
-        if (_bitmap == null)
-            return;
-
-        _softCamera.PushFrame(_bitmap);
-        if (_settings.ShowStream)
+        try
         {
-            this.Invoke(() =>
+            if (_softCamera == null || frame.Empty())
+                return;
+
+            if (!_softCamera.AppIsConnected)
+                return;
+
+            _filtered = ApplyFilters(frame, _settings.Filters, _settings.Width, _settings.Height);
+            _bitmap = MatToBitmap(_filtered);
+            if (_bitmap == null)
+                return;
+
+            _softCamera.PushFrame(_bitmap);
+            if (_settings.ShowStream)
             {
-                pictureBox_cam.Image = _bitmap;
-            });
+                this.Invoke(() =>
+                {
+                    pictureBox_cam.Image = _bitmap;
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error in ImageCapturedEvent: {ex}");
+            // Don't rethrow - async void would crash the application
         }
     }
 
@@ -209,7 +185,6 @@ public partial class Form1 : Form
             return;
         }
 
-        //_cameraFeed = Task.Run(CameraFeed, (CancellationToken)_cancellationToken);
         _cameraStarted = true;
         _cameraHub.ImageCapturedEvent += ImageCapturedEvent;
 
@@ -443,7 +418,7 @@ public partial class Form1 : Form
         }
     }
 
-    private static Mat? ApplyFilters(Mat? image, FilterSettings filters, int softCamWidth, int softCamHeight)
+    private Mat? ApplyFilters(Mat? image, FilterSettings filters, int softCamWidth, int softCamHeight)
     {
         if (image == null || image.Empty())
             return null;
@@ -474,7 +449,7 @@ public partial class Form1 : Form
         return _resizedImage;
     }
 
-    private static Mat? ResizeFit(Mat? image, int maxWidth, int maxHeight)
+    private Mat? ResizeFit(Mat? image, int maxWidth, int maxHeight)
     {
         if (image == null || image.Empty())
             return null;

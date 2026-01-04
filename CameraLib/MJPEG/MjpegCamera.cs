@@ -39,6 +39,11 @@ public class MjpegCamera : ICamera
     private const byte PicStart = 0xD8;
     private const byte PicEnd = 0xD9;
 
+    private static readonly HttpClient _httpClient = new HttpClient
+    {
+        Timeout = Timeout.InfiniteTimeSpan
+    };
+
     private CancellationTokenSource? _cancellationTokenSource;
     private CancellationTokenSource? _cancellationTokenSourceCameraGrabber;
     private readonly object _getPictureThreadLock = new();
@@ -72,7 +77,7 @@ public class MjpegCamera : ICamera
             ? cameraUri.Host
             : name;
 
-        Description = new CameraDescription(CameraType.IP, path, name, []);
+        Description = new CameraDescription(CameraType.MJPEG, path, name, []);
         _keepAliveTimer.Elapsed += CheckCameraDisconnected;
     }
 
@@ -223,7 +228,7 @@ public class MjpegCamera : ICamera
         _cancellationTokenSourceCameraGrabber?.Cancel();
         try
         {
-            _imageGrabber?.Wait();
+            _imageGrabber?.Wait(TimeSpan.FromMilliseconds(5000));
         }
         catch (Exception ex)
         {
@@ -275,15 +280,33 @@ public class MjpegCamera : ICamera
             return capturedFrame;
         }
 
+        Mat? frame = null;
+        void TempImageCapturedEvent(ICamera camera, Mat image)
+        {
+            frame ??= image.Clone();
+        }
+
         await Task.Run(async () =>
         {
             if (await StartAsync(0, 0, string.Empty, token))
-                _frame = await GrabFrameAsync(token);
+            {
+                ImageCapturedEvent += TempImageCapturedEvent;
+                var watch = Stopwatch.StartNew();
+
+                while (frame == null
+                       && watch.ElapsedMilliseconds < FrameTimeout
+                       && !token.IsCancellationRequested)
+                {
+                    await Task.Delay(10, token);
+                }
+
+                ImageCapturedEvent -= TempImageCapturedEvent;
+            }
 
             Stop();
         }, token);
 
-        return _frame;
+        return frame;
     }
 
     public async IAsyncEnumerable<Mat> GrabFrames([EnumeratorCancellation] CancellationToken token)
@@ -316,44 +339,66 @@ public class MjpegCamera : ICamera
     /// <returns></returns>
     private async Task StartAsync(string url, AuthType authenticationType, CancellationToken token, string login = "", string password = "", int chunkMaxSize = 1024, int frameBufferSize = 1024 * 1024)
     {
-        using (var httpClient = new HttpClient())
+        try
         {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+
             if (authenticationType == AuthType.Basic)
-                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue(
                     "Basic",
                     Convert.ToBase64String(Encoding.ASCII.GetBytes($"{login}:{password}")));
+            }
 
-            IsRunning = true;
-            try
+            using var response = await _httpClient.SendAsync(request,
+                HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
+
+            response.EnsureSuccessStatusCode();
+
+            await using (var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false))
             {
-                await using (var stream = await httpClient.GetStreamAsync(url, token).ConfigureAwait(false))
+                IsRunning = true;
+
+                var streamBuffer = new byte[chunkMaxSize];      // Stream chunk read
+                var frameBuffer = new byte[frameBufferSize];    // Frame buffer
+
+                var frameIdx = 0;       // Last written byte location in the frame buffer
+                var inPicture = false;  // Are we currently parsing a picture ?
+                byte current = 0x00;    // The last byte read
+                byte previous = 0x00;   // The byte before
+
+                // Continuously pump the stream. The cancellation token is used to get out of there
+                while (!token.IsCancellationRequested)
                 {
-                    var streamBuffer = new byte[chunkMaxSize];      // Stream chunk read
-                    var frameBuffer = new byte[frameBufferSize];    // Frame buffer
+                    var streamLength = await stream.ReadAsync(streamBuffer.AsMemory(0, chunkMaxSize), token)
+                        .ConfigureAwait(false);
 
-                    var frameIdx = 0;       // Last written byte location in the frame buffer
-                    var inPicture = false;  // Are we currently parsing a picture ?
-                    byte current = 0x00;    // The last byte read
-                    byte previous = 0x00;   // The byte before
+                    if (streamLength == 0)
+                        break;
 
-                    // Continuously pump the stream. The cancellation token is used to get out of there
-                    while (!token.IsCancellationRequested)
-                    {
-                        var streamLength = await stream.ReadAsync(streamBuffer.AsMemory(0, chunkMaxSize), token)
-                            .ConfigureAwait(false);
-
-                        ParseStreamBuffer(frameBuffer, ref frameIdx, streamLength, streamBuffer, ref inPicture,
-                            ref previous, ref current, token);
-                    }
-
-                    IsRunning = false;
+                    ParseStreamBuffer(frameBuffer, ref frameIdx, streamLength, streamBuffer, ref inPicture,
+                        ref previous, ref current, token);
                 }
             }
-            catch (Exception ex)
-            {
-                Stop();
-                Debug.WriteLine(ex);
-            }
+        }
+        catch (HttpRequestException ex)
+        {
+            Debug.WriteLine($"MJPEG HTTP request failed: {ex.Message}");
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            Debug.WriteLine("MJPEG stream cancelled");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"MJPEG stream error: {ex}");
+            throw;
+        }
+        finally
+        {
+            IsRunning = false;
         }
     }
 
@@ -374,7 +419,7 @@ public class MjpegCamera : ICamera
         }
     }
 
-    // While we are looking for a picture, look for a FFD8 (end of JPEG) sequence.
+    // While we are looking for a picture, look for a FFD8 (start of JPEG) sequence.
     private static void SearchPicture(byte[] frameBuffer, ref int frameIdx, ref int streamLength, byte[] streamBuffer, ref int idx, ref bool inPicture, ref byte previous, ref byte current, CancellationToken token)
     {
         do
@@ -394,13 +439,22 @@ public class MjpegCamera : ICamera
         } while (idx < streamLength && !token.IsCancellationRequested);
     }
 
-    // While we are parsing a picture, fill the frame buffer until a FFD9 is reach.
+    // While we are parsing a picture, fill the frame buffer until a FFD9 is reached.
     private void ParsePicture(byte[] frameBuffer, ref int frameIdx, ref int streamLength, byte[] streamBuffer, ref int idx, ref bool inPicture, ref byte previous, ref byte current, CancellationToken token)
     {
         do
         {
             previous = current;
             current = streamBuffer[idx++];
+
+            // Check for buffer overflow
+            if (frameIdx >= frameBuffer.Length)
+            {
+                Debug.WriteLine("MJPEG: Frame buffer overflow, skipping frame");
+                inPicture = false;
+                return;
+            }
+
             frameBuffer[frameIdx++] = current;
 
             // JPEG picture end ?
@@ -418,8 +472,14 @@ public class MjpegCamera : ICamera
                     try
                     {
                         _frame ??= new Mat();
-                        _frame = Cv2.ImDecode(frameBuffer, ImreadModes.Color);
-                        //CurrentFrameFormat ??= new FrameFormat(_frame.Width, _frame.Height);
+                        _frame = Cv2.ImDecode(frameBuffer.AsSpan(0, frameIdx), ImreadModes.Color);
+
+                        if (_frame == null || _frame.Empty())
+                        {
+                            Debug.WriteLine("MJPEG: Failed to decode frame");
+                            return;
+                        }
+
                         if (!Description.FrameFormats.Any()
                             || (Description.FrameFormats.Count() == 1
                                 && Description.FrameFormats.First().Width == 0))
@@ -427,9 +487,9 @@ public class MjpegCamera : ICamera
 
                         ImageCapturedEvent?.Invoke(this, _frame.Clone());
                     }
-                    catch
+                    catch (OpenCvSharpException ex)
                     {
-                        // We don't care about badly decoded pictures
+                        Debug.WriteLine($"MJPEG: Failed to decode frame: {ex.Message}");
                     }
                 }
 
@@ -459,47 +519,6 @@ public class MjpegCamera : ICamera
     }
 
     #endregion
-
-    public FrameFormat GetNearestFormat(int width, int height, string format)
-    {
-        FrameFormat? selectedFormat;
-
-        if (!Description.FrameFormats.Any())
-            return new FrameFormat(0, 0);
-
-        if (Description.FrameFormats.Count() == 1)
-            return Description.FrameFormats.First();
-
-        if (width > 0 && height > 0)
-        {
-            var mpix = width * height;
-            selectedFormat = Description.FrameFormats.MinBy(n => Math.Abs(n.Width * n.Height - mpix));
-        }
-        else
-            selectedFormat = Description.FrameFormats.MaxBy(n => n.Width * n.Height);
-
-        var result = Description.FrameFormats
-            .Where(n =>
-                n.Width == (selectedFormat?.Width ?? 0)
-                && n.Height == (selectedFormat?.Height ?? 0))
-            .ToArray();
-
-        if (result.Length != 0)
-        {
-            var result2 = result.Where(n => n.Format == format)
-                .ToArray();
-
-            if (result2.Length != 0)
-                result = result2;
-        }
-
-        if (result.Length == 0)
-            return new FrameFormat(0, 0);
-
-        var result3 = result.MaxBy(n => n.Fps) ?? result[0];
-
-        return result3;
-    }
 
     protected virtual void Dispose(bool disposing)
     {
